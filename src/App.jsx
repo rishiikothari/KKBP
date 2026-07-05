@@ -321,6 +321,7 @@ const freshState = () => ({
   drawings: SEED_DRAWINGS, rfis: SEED_RFIS, zones: SEED_ZONES,
   tasks: SEED_TASKS, approvals: SEED_APPROVALS, announcements: SEED_ANNOUNCEMENTS,
   meetings: SEED_MEETINGS, docs: SEED_DOCS,
+  aiKey: "",
   log: [{ ts: Date.now(), by: "System", text: "KKBP Team OS v2 initialised — official channel live." }],
   acks: {}, constitutionVersion: 2,
 });
@@ -1771,6 +1772,7 @@ function MeetingStudio({ state, setState, user }) {
   const [aiErr, setAiErr] = useState("");
   const [apiKey, setApiKey] = useState(loadApiKey());
   const [needKey, setNeedKey] = useState(false);
+  const effKey = ((state.aiKey || "").trim()) || apiKey;
   const [proposal, setProposal] = useState(null); // {summary,decisions,actions:[{...include:true}],risks,highlights}
 
   const resetRecorder = () => {
@@ -1857,7 +1859,7 @@ function MeetingStudio({ state, setState, user }) {
     setAiBusy(true); setAiErr(""); setNeedKey(false);
     try {
       const roster = state.users;
-      const out = await analyzeMeeting(transcriptDraft, roster, { title: meta.title || "KKBP meeting", date: today() }, apiKey);
+      const out = await analyzeMeeting(transcriptDraft, roster, { title: meta.title || "KKBP meeting", date: today() }, effKey);
       const validIds = new Set(roster.map((u) => u.id));
       setProposal({
         summary: out.summary || "",
@@ -2074,9 +2076,9 @@ function MeetingStudio({ state, setState, user }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 14 }}>
         <Card title={`Transcript — ${meta.title || "Untitled"} (${fmtClock(elapsed)})`}>
           <Ta rows={16} value={transcriptDraft} onChange={(e) => setTranscriptDraft(e.target.value)} />
-          {(needKey || (!IS_CLOUD && !apiKey)) && (
+          {(needKey || (!IS_CLOUD && !effKey)) && (
             <div style={{ marginTop: 12 }}>
-              <Field label="Anthropic API key (standalone mode — stays in this browser)">
+              <Field label="Anthropic API key (or ask the Owner to set the team key in Team & Access)">
                 <Inp type="password" value={apiKey} placeholder="sk-ant-…"
                   onChange={(e) => { setApiKey(e.target.value.trim()); storeApiKey(e.target.value.trim()); }} />
               </Field>
@@ -2320,6 +2322,23 @@ function Team({ state, setState, user, liveStatus }) {
           </Card>
         );
       })}
+      {canWrite && (
+        <Card title="AI Notetaker — Claude API key" style={{ marginBottom: 12, maxWidth: 760 }}>
+          <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.65 }}>
+            Status:{" "}
+            <Badge text={(state.aiKey || "").trim() ? "Key set — AI meeting analysis works for the whole team" : "No key — each person must enter their own on the AI review screen"} color={(state.aiKey || "").trim() ? C.green : C.amber} />
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <Field label="Anthropic API key (console.anthropic.com → API keys)">
+              <Inp type="password" value={state.aiKey || ""} placeholder="sk-ant-…"
+                onChange={(e) => { const v = e.target.value.trim(); setState((st) => ({ ...st, aiKey: v })); }} />
+            </Field>
+          </div>
+          <div style={{ fontSize: 11.5, color: C.faint, marginTop: 10, lineHeight: 1.6 }}>
+            Stored inside the app's data (and synced to every device through the live shared workspace) — never in the public code. Anyone with access to this app can use it for meeting analysis, so treat it like a shared office key: keep the app link internal, and rotate the key at console.anthropic.com if it leaks.
+          </div>
+        </Card>
+      )}
       {canWrite && (
         <Card title="Live shared workspace" style={{ marginBottom: 12, maxWidth: 760 }}>
           <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.65 }}>
