@@ -6,6 +6,7 @@ import {
   Landmark, KeyRound, ChevronRight, FileText, CalendarDays, Wrench, Search,
   ListChecks, Stamp, Bell, FolderOpen, NotebookPen, Send, ThumbsUp, ThumbsDown,
   Pin, Link as LinkIcon, Activity, Mic, Square, Sparkles, Loader2, FileAudio, MessageSquareText, Pause, Play,
+  Menu,
 } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
@@ -271,6 +272,10 @@ async function saveState(s) {
   }
   try { localStorage.setItem(SKEY, JSON.stringify(s)); return true; } catch (e) { return false; }
 }
+/* Signed-in seat + current page survive a refresh on this device (cleared on sign-out). */
+const SESS_KEY = "kkbp-session";
+const loadSession = () => { try { return JSON.parse(sessionStorage.getItem(SESS_KEY) || "null"); } catch (e) { return null; } };
+const saveSession = (s) => { try { if (s) sessionStorage.setItem(SESS_KEY, JSON.stringify(s)); else sessionStorage.removeItem(SESS_KEY); } catch (e) {} };
 const loadApiKey = () => { if (IS_CLOUD) return ""; try { return localStorage.getItem("kkbp-anthropic-key") || ""; } catch (e) { return ""; } };
 const storeApiKey = (k) => { if (!IS_CLOUD) { try { localStorage.setItem("kkbp-anthropic-key", k); } catch (e) {} } };
 const freshState = () => ({
@@ -306,6 +311,7 @@ const ago = (ts) => {
   if (m < 1) return "now"; if (m < 60) return `${m}m`; const h = Math.floor(m / 60);
   if (h < 24) return `${h}h`; return `${Math.floor(h / 24)}d`;
 };
+const isOverdue = (due, closed) => !!due && !closed && due < today();
 /* ================= UI PRIMITIVES ================= */
 const Card = ({ title, right, children, pad = 16, style }) => (
   <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 10, ...style }}>
@@ -516,7 +522,7 @@ function Overview({ state, setState, user, goTo }) {
               <Circle size={13} color={k.priority === "High" ? C.red : C.amber} style={{ marginTop: 3, flexShrink: 0 }} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 13, color: C.text }}>{k.title}</div>
-                <div style={{ fontSize: 11, color: C.faint }}>{DEPTS[k.dept]?.label} · due {k.due || "—"} · {k.status}</div>
+                <div style={{ fontSize: 11, color: C.faint }}>{DEPTS[k.dept]?.label} · <span style={isOverdue(k.due, false) ? { color: C.red, fontWeight: 700 } : undefined}>due {k.due || "—"}{isOverdue(k.due, false) ? " · OVERDUE" : ""}</span> · {k.status}</div>
               </div>
             </div>
           ))}
@@ -525,7 +531,7 @@ function Overview({ state, setState, user, goTo }) {
               <Megaphone size={13} color={C.rose} style={{ marginTop: 3, flexShrink: 0 }} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 13, color: C.text }}>{c.title}</div>
-                <div style={{ fontSize: 11, color: C.faint }}>Content Studio · due {c.due || "—"} · {c.status}</div>
+                <div style={{ fontSize: 11, color: C.faint }}>Content Studio · <span style={isOverdue(c.due, false) ? { color: C.red, fontWeight: 700 } : undefined}>due {c.due || "—"}{isOverdue(c.due, false) ? " · OVERDUE" : ""}</span> · {c.status}</div>
               </div>
             </div>
           ))}
@@ -631,7 +637,7 @@ function Tasks({ state, setState, user }) {
                   <div style={{ fontSize: 11, color: C.faint, marginTop: 6 }}>
                     <Badge text={DEPTS[k.dept]?.short || k.dept} color={DEPTS[k.dept]?.accent || C.faint} />{" "}
                     <span style={{ marginLeft: 6 }}>{uName(state, k.assigneeId)}</span>
-                    {k.due && <span> · due {k.due}</span>}
+                    {k.due && <span style={isOverdue(k.due, k.status === "Done") ? { color: C.red, fontWeight: 700 } : undefined}> · due {k.due}{isOverdue(k.due, k.status === "Done") ? " · OVERDUE" : ""}</span>}
                     {k.priority === "High" && <span style={{ color: C.red }}> · HIGH</span>}
                     {k.source === "meeting" && <span style={{ color: C.teal }}> · from meeting</span>}
                   </div>
@@ -1020,7 +1026,7 @@ function Capex({ state, setState, canWrite }) {
                     <Td right>{fmtL(c.spentL)}</Td>
                     <Td style={{ minWidth: 110 }}><Bar_ pct={((+c.spentL || 0) / Math.max(1, +c.budgetL || 0)) * 100} /></Td>
                     <Td><Badge text={ap.text} color={ap.color} /></Td>
-                    <Td style={{ color: C.mute, fontSize: 12 }}>{c.due || "—"}</Td>
+                    <Td style={isOverdue(c.due, c.status === "Complete") ? { color: C.red, fontSize: 12, fontWeight: 700 } : { color: C.mute, fontSize: 12 }}>{c.due || "—"}{isOverdue(c.due, c.status === "Complete") ? " ⚠" : ""}</Td>
                     <Td><Badge text={c.status} color={CSTATUS_COLOR[c.status]} /></Td>
                     {canWrite && <Td right>
                       <Pencil size={14} color={C.mute} style={{ cursor: "pointer", marginRight: 12 }} onClick={() => setEdit({ ...c })} />
@@ -1215,7 +1221,7 @@ function AdminOps({ state, setState, canWrite }) {
                     <Td style={{ fontWeight: 600 }}>{c.name}</Td>
                     <Td style={{ color: C.mute }}>{c.authority}</Td>
                     <Td style={{ color: C.mute, fontSize: 12 }}>{c.type}</Td>
-                    <Td style={{ color: C.mute, fontSize: 12 }}>{c.due || "—"}</Td>
+                    <Td style={isOverdue(c.due, c.status === "Done") ? { color: C.red, fontSize: 12, fontWeight: 700 } : { color: C.mute, fontSize: 12 }}>{c.due || "—"}{isOverdue(c.due, c.status === "Done") ? " ⚠" : ""}</Td>
                     <Td style={{ color: C.mute, fontSize: 12 }}>{c.owner}</Td>
                     <Td><Badge text={c.status} color={COMP_COLOR[c.status]} /></Td>
                     {canWrite && <Td right>
@@ -1513,7 +1519,7 @@ function MarketingStudio({ state, setState, user }) {
                         <div style={{ fontSize: 13, color: C.text, lineHeight: 1.45 }}>{c.title}</div>
                         {(head || (internalMkt && !["Approved","Published"].includes(c.status))) && <Pencil size={12} color={C.mute} style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => setEditK({ ...c })} />}
                       </div>
-                      <div style={{ fontSize: 11, color: C.faint, marginTop: 6 }}>{c.type} · {uName(state, c.assigneeId)}{c.due && ` · due ${c.due}`}</div>
+                      <div style={{ fontSize: 11, color: C.faint, marginTop: 6 }}>{c.type} · {uName(state, c.assigneeId)}{c.due && <span style={isOverdue(c.due, ["Approved","Published"].includes(c.status)) ? { color: C.red, fontWeight: 700 } : undefined}> · due {c.due}{isOverdue(c.due, ["Approved","Published"].includes(c.status)) ? " · OVERDUE" : ""}</span>}</div>
                       {c.campaign && <div style={{ fontSize: 10.5, color: C.rose, marginTop: 3 }}>{c.campaign}</div>}
                       {c.brief && <div style={{ fontSize: 11.5, color: C.mute, marginTop: 6, lineHeight: 1.5 }}>{c.brief}</div>}
                       {c.link && <a href={c.link} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.blue, marginTop: 6, display: "inline-flex", alignItems: "center", gap: 4 }}><LinkIcon size={11} /> Deliverable</a>}
@@ -2333,14 +2339,33 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [page, setPage] = useState("overview");
   const [saveTick, setSaveTick] = useState("");
+  const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
+  const [navOpen, setNavOpen] = useState(false);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   useEffect(() => {
     (async () => {
       const loaded = await loadState();
-      if (loaded) setState({ ...freshState(), ...loaded });
-      else { const f = freshState(); setState(f); await saveState(f); }
+      const full = loaded ? { ...freshState(), ...loaded } : freshState();
+      setState(full);
+      if (!loaded) await saveState(full);
+      const sess = loadSession();
+      if (sess) {
+        const u = full.users.find((x) => x.id === sess.userId);
+        if (u) {
+          setUser(u);
+          if (sess.page && PAGES.some((pg) => pg.key === sess.page && pageAllowed(pg, u))) setPage(sess.page);
+        }
+      }
     })();
   }, []);
+
+  useEffect(() => { if (user) saveSession({ userId: user.id, page }); }, [user, page]);
 
   useEffect(() => {
     if (!state) return;
@@ -2355,7 +2380,7 @@ export default function App() {
   if (!state) {
     return <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", color: C.mute, fontFamily: SANS, fontSize: 14 }}>Loading KKBP Team OS…</div>;
   }
-  if (!user) return <Login users={state.users} onLogin={(u) => { setUser(u); setPage("overview"); }} />;
+  if (!user) return <Login users={state.users} onLogin={(u) => { setUser(u); setPage("overview"); saveSession({ userId: u.id, page: "overview" }); }} />;
 
   const D = DEPTS[user.dept];
   const myPages = PAGES.filter((p) => pageAllowed(p, user));
@@ -2382,7 +2407,19 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: SANS, display: "flex" }}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}} .spin{animation:spin 1s linear infinite}`}</style>
-      <div style={{ width: 226, flexShrink: 0, background: C.panel3, borderRight: `1px solid ${C.line}`, display: "flex", flexDirection: "column", position: "sticky", top: 0, height: "100vh" }}>
+      {isMobile && (
+        <button onClick={() => setNavOpen(true)} aria-label="Open menu" style={{
+          position: "fixed", top: 12, left: 12, zIndex: 30, display: "flex", alignItems: "center", justifyContent: "center",
+          width: 40, height: 40, borderRadius: 10, background: C.panel2, border: `1px solid ${C.line}`, cursor: "pointer",
+        }}><Menu size={18} color={C.gold} /></button>
+      )}
+      {isMobile && navOpen && <div onClick={() => setNavOpen(false)} style={{ position: "fixed", inset: 0, background: "#000A", zIndex: 39 }} />}
+      <div style={{
+        width: 226, flexShrink: 0, background: C.panel3, borderRight: `1px solid ${C.line}`, display: "flex", flexDirection: "column",
+        ...(isMobile
+          ? { position: "fixed", left: 0, top: 0, bottom: 0, zIndex: 40, transform: navOpen ? "translateX(0)" : "translateX(-105%)", transition: "transform .25s ease", boxShadow: navOpen ? "0 0 40px #000A" : "none" }
+          : { position: "sticky", top: 0, height: "100vh" }),
+      }}>
         <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${C.lineSoft}` }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 34, height: 34, borderRadius: 9, border: `1px solid ${C.gold}55`, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -2405,7 +2442,7 @@ export default function App() {
                   const Icon = p.icon;
                   const active = page === p.key;
                   return (
-                    <div key={p.key} onClick={() => setPage(p.key)} style={{
+                    <div key={p.key} onClick={() => { setPage(p.key); if (isMobile) setNavOpen(false); }} style={{
                       display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, cursor: "pointer",
                       background: active ? C.panel2 : "transparent", borderLeft: `3px solid ${active ? D.accent : "transparent"}`, marginBottom: 1,
                     }}>
@@ -2431,12 +2468,12 @@ export default function App() {
               <div style={{ fontSize: 12, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</div>
               <div style={{ fontSize: 9.5, color: C.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.subRole}</div>
             </div>
-            <LogOut size={15} color={C.mute} style={{ cursor: "pointer" }} onClick={() => setUser(null)} title="Sign out" />
+            <LogOut size={15} color={C.mute} style={{ cursor: "pointer" }} onClick={() => { saveSession(null); setUser(null); }} title="Sign out" />
           </div>
           <div style={{ fontSize: 10, color: saveTick.includes("⚠") ? C.red : C.green, marginTop: 8, height: 12 }}>{saveTick}</div>
         </div>
       </div>
-      <div style={{ flex: 1, minWidth: 0, padding: "26px 26px 60px" }}>
+      <div style={{ flex: 1, minWidth: 0, padding: isMobile ? "64px 14px 60px" : "26px 26px 60px" }}>
         {Current}
       </div>
     </div>
