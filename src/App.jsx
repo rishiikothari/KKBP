@@ -452,8 +452,8 @@ function Login({ users, onLogin, liveOn }) {
           <div style={{ width: 54, height: 54, margin: "0 auto 14px", borderRadius: 12, border: `1px solid ${C.gold}66`, display: "flex", alignItems: "center", justifyContent: "center", background: "#161D27" }}>
             <Landmark size={26} color={C.gold} />
           </div>
-          <div style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: C.gold }}>Karan Kothari Business Park</div>
-          <div style={{ fontFamily: SERIF, fontSize: 34, color: C.text, marginTop: 6 }}>KKBP Team OS</div>
+          <div style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: C.gold }}>The Town Junction · Nagpur</div>
+          <div style={{ fontFamily: SERIF, fontSize: 34, color: C.text, marginTop: 6 }}>TTJ Team OS</div>
           <div style={{ color: C.mute, fontSize: 13, marginTop: 6 }}>The official channel. Sign in to take your seat.</div>
         </div>
 
@@ -2498,7 +2498,7 @@ export default function App() {
   }, [state]);
 
   if (!state) {
-    return <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", color: C.mute, fontFamily: SANS, fontSize: 14 }}>Loading KKBP Team OS…</div>;
+    return <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", color: C.mute, fontFamily: SANS, fontSize: 14 }}>Loading TTJ Team OS…</div>;
   }
   if (!user) return <Login users={state.users} liveOn={liveStatus === "on"} onLogin={(u) => { setUser(u); setPage("overview"); saveSession({ userId: u.id, page: "overview" }); }} />;
 
@@ -2546,7 +2546,7 @@ export default function App() {
               <Landmark size={17} color={C.gold} />
             </div>
             <div>
-              <div style={{ fontFamily: SERIF, fontSize: 15, color: C.text }}>KKBP Team OS</div>
+              <div style={{ fontFamily: SERIF, fontSize: 15, color: C.text }}>TTJ Team OS</div>
               <div style={{ fontSize: 10, color: liveStatus === "on" ? C.green : C.faint, letterSpacing: 1, textTransform: "uppercase" }}>{IS_CLOUD ? "Official channel" : liveStatus === "on" ? "● Live · shared" : liveStatus === "connecting" ? "Connecting…" : liveStatus === "error" ? "Live sync offline" : "Standalone · this device"}</div>
             </div>
           </div>
