@@ -2283,15 +2283,55 @@ function Team({ state, setState, user, liveStatus }) {
     rd.readAsText(f);
     e.target.value = "";
   };
+  /* Additive merge: adds records the app doesn't already have (matched by id; users also by
+     username) without overwriting or deleting anything, and never touches the AI key, live
+     config, acks or logs. Safe to run repeatedly and on the live shared workspace — the
+     intended way to fold in each new WhatsApp-history file. */
+  const mergeJson = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      try {
+        const data = JSON.parse(rd.result);
+        if (typeof data !== "object" || !data) throw new Error("bad shape");
+        const COLS = ["users","tenants","capex","campaigns","content","compliance","vendors","drawings","rfis","zones","tasks","approvals","announcements","meetings","docs"];
+        let added = 0;
+        setState((st) => {
+          const next = { ...st };
+          COLS.forEach((k) => {
+            const cur = Array.isArray(st[k]) ? st[k] : [];
+            const seen = new Set(cur.map((r) => r && r.id));
+            const names = k === "users" ? new Set(cur.map((u) => (u.username || "").toLowerCase())) : null;
+            const incoming = Array.isArray(data[k]) ? data[k] : [];
+            const fresh = incoming.filter((r) => {
+              if (!r || !r.id || seen.has(r.id)) return false;
+              if (names && names.has((r.username || "").toLowerCase())) return false;
+              return true;
+            });
+            if (fresh.length) { next[k] = [...cur, ...fresh]; added += fresh.length; }
+          });
+          return withLog(next, user.name, `merged history file — added ${added} new record${added === 1 ? "" : "s"} (${f.name})`);
+        });
+        setTimeout(() => alert(`Merge complete — added ${added} new records. Existing data, the AI key and live sync were left untouched.`), 60);
+      } catch (err) { alert("That file couldn't be merged — make sure it's a TTJ history/backup JSON."); }
+    };
+    rd.readAsText(f);
+    e.target.value = "";
+  };
   const deptOrder = ["exec","leasing","marketing","project","design","admin"];
   return (
     <div>
       <SectionTitle eyebrow="Access control" title="Team & Access" sub="Departments, sub-roles and tiers. Heads run their department; team members work registers; externals (agencies, consultants, brokers) see only their deliverables." />
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
         <Btn ghost onClick={exportJson}><Download size={14} /> Export all data (JSON)</Btn>
-        {canWrite && <label style={{ display: "inline-flex" }}>
+        {canWrite && <label style={{ display: "inline-flex" }} title="Add new records from a history file without overwriting existing data, the AI key, or live sync.">
+          <input type="file" accept="application/json" style={{ display: "none" }} onChange={mergeJson} />
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", background: "transparent", color: C.green, border: `1px solid ${C.green}66`, borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, fontFamily: SANS }}><Plus size={14} /> Merge history file</span>
+        </label>}
+        {canWrite && <label style={{ display: "inline-flex" }} title="Replace ALL data with a full backup file.">
           <input type="file" accept="application/json" style={{ display: "none" }} onChange={importJson} />
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", background: "transparent", color: C.gold, border: `1px solid ${C.gold}66`, borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, fontFamily: SANS }}><FileAudio size={14} style={{display:"none"}} /><Download size={14} style={{ transform: "rotate(180deg)" }} /> Import JSON</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", background: "transparent", color: C.gold, border: `1px solid ${C.gold}66`, borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, fontFamily: SANS }}><Download size={14} style={{ transform: "rotate(180deg)" }} /> Import JSON (replace)</span>
         </label>}
         {canWrite && <Btn onClick={() => setEdit({ id: "", name: "", dept: "leasing", subRole: "", tier: "member", username: "", password: "" })}><Plus size={14} /> Add member</Btn>}
       </div>
