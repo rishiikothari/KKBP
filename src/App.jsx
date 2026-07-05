@@ -79,24 +79,24 @@ const canWritePage = (key, u) => {
 const CMA_TARGET_L = 541;
 
 const SEED_USERS = [
-  { id: "u1",  name: "Rishi Kothari",        dept: "exec",      subRole: "Owner / Promoter",                 tier: "head",     exec: "owner", pin: "7001" },
-  { id: "u2",  name: "CEO",                  dept: "exec",      subRole: "Chief Executive Officer",          tier: "head",     exec: "ceo",   pin: "7002" },
-  { id: "u3",  name: "Leasing Head",         dept: "leasing",   subRole: "Head of Leasing",                  tier: "head",     pin: "7003" },
-  { id: "u4",  name: "Leasing Executive",    dept: "leasing",   subRole: "Leasing Executive",                tier: "member",   pin: "7103" },
-  { id: "u5",  name: "Channel Partner",      dept: "leasing",   subRole: "Broker / Channel Partner",         tier: "external", pin: "7203" },
-  { id: "u6",  name: "Marketing Head",       dept: "marketing", subRole: "Head of Marketing",                tier: "head",     pin: "7004" },
-  { id: "u7",  name: "Content Executive",    dept: "marketing", subRole: "In-house Content Team",            tier: "member",   pin: "7104" },
-  { id: "u8",  name: "Marketing Intern",     dept: "marketing", subRole: "Intern — KKBP",                    tier: "member",   pin: "7114" },
-  { id: "u9",  name: "INIT — Copywriter",    dept: "marketing", subRole: "INIT Design Studio · Copywriting", tier: "external", pin: "7124" },
-  { id: "u10", name: "INIT — Designer",      dept: "marketing", subRole: "INIT Design Studio · Design",      tier: "external", pin: "7134" },
-  { id: "u11", name: "OCDS — Digital",       dept: "marketing", subRole: "OCDS Design Studio · Digital Media", tier: "external", pin: "7144" },
-  { id: "u12", name: "Admin Head",           dept: "admin",     subRole: "Head of Admin & Operations",       tier: "head",     pin: "7005" },
-  { id: "u13", name: "Facility Executive",   dept: "admin",     subRole: "Facility & Vendor Management",     tier: "member",   pin: "7105" },
-  { id: "u14", name: "Project Head",         dept: "project",   subRole: "Head of Projects",                 tier: "head",     pin: "7006" },
-  { id: "u15", name: "Site Engineer",        dept: "project",   subRole: "Site Engineering",                 tier: "member",   pin: "7106" },
-  { id: "u16", name: "Principal Architect",  dept: "design",    subRole: "Principal Architect",              tier: "head",     pin: "7007" },
-  { id: "u17", name: "MEP Consultant",       dept: "design",    subRole: "MEP Consultant (HVAC/Elec/PHE)",   tier: "external", pin: "7107" },
-  { id: "u18", name: "Structural Consultant",dept: "design",    subRole: "Structural Consultant",            tier: "external", pin: "7117" },
+  { id: "u1",  name: "Rishi Kothari",        dept: "exec",      subRole: "Owner / Promoter",                 tier: "head",     exec: "owner", username: "rishi",                  password: "7001" },
+  { id: "u2",  name: "CEO",                  dept: "exec",      subRole: "Chief Executive Officer",          tier: "head",     exec: "ceo",   username: "ceo",                    password: "7002" },
+  { id: "u3",  name: "Leasing Head",         dept: "leasing",   subRole: "Head of Leasing",                  tier: "head",     username: "leasing.head",           password: "7003" },
+  { id: "u4",  name: "Leasing Executive",    dept: "leasing",   subRole: "Leasing Executive",                tier: "member",   username: "leasing.exec",           password: "7103" },
+  { id: "u5",  name: "Channel Partner",      dept: "leasing",   subRole: "Broker / Channel Partner",         tier: "external", username: "channel.partner",        password: "7203" },
+  { id: "u6",  name: "Marketing Head",       dept: "marketing", subRole: "Head of Marketing",                tier: "head",     username: "marketing.head",         password: "7004" },
+  { id: "u7",  name: "Content Executive",    dept: "marketing", subRole: "In-house Content Team",            tier: "member",   username: "content.exec",           password: "7104" },
+  { id: "u8",  name: "Marketing Intern",     dept: "marketing", subRole: "Intern — KKBP",                    tier: "member",   username: "marketing.intern",       password: "7114" },
+  { id: "u9",  name: "INIT — Copywriter",    dept: "marketing", subRole: "INIT Design Studio · Copywriting", tier: "external", username: "init.copy",              password: "7124" },
+  { id: "u10", name: "INIT — Designer",      dept: "marketing", subRole: "INIT Design Studio · Design",      tier: "external", username: "init.design",            password: "7134" },
+  { id: "u11", name: "OCDS — Digital",       dept: "marketing", subRole: "OCDS Design Studio · Digital Media", tier: "external", username: "ocds.digital",           password: "7144" },
+  { id: "u12", name: "Admin Head",           dept: "admin",     subRole: "Head of Admin & Operations",       tier: "head",     username: "admin.head",             password: "7005" },
+  { id: "u13", name: "Facility Executive",   dept: "admin",     subRole: "Facility & Vendor Management",     tier: "member",   username: "facility.exec",          password: "7105" },
+  { id: "u14", name: "Project Head",         dept: "project",   subRole: "Head of Projects",                 tier: "head",     username: "project.head",           password: "7006" },
+  { id: "u15", name: "Site Engineer",        dept: "project",   subRole: "Site Engineering",                 tier: "member",   username: "site.engineer",          password: "7106" },
+  { id: "u16", name: "Principal Architect",  dept: "design",    subRole: "Principal Architect",              tier: "head",     username: "architect",              password: "7007" },
+  { id: "u17", name: "MEP Consultant",       dept: "design",    subRole: "MEP Consultant (HVAC/Elec/PHE)",   tier: "external", username: "mep.consultant",         password: "7107" },
+  { id: "u18", name: "Structural Consultant",dept: "design",    subRole: "Structural Consultant",            tier: "external", username: "structural.consultant",  password: "7117" },
 ];
 
 const TENANT_CATS = ["Anchor Retail","Anchor Brand","Vanilla Retail","F&B","Entertainment","Department Store","Services","Pool / Unallocated"];
@@ -276,6 +276,42 @@ async function saveState(s) {
 const SESS_KEY = "kkbp-session";
 const loadSession = () => { try { return JSON.parse(sessionStorage.getItem(SESS_KEY) || "null"); } catch (e) { return null; } };
 const saveSession = (s) => { try { if (s) sessionStorage.setItem(SESS_KEY, JSON.stringify(s)); else sessionStorage.removeItem(SESS_KEY); } catch (e) {} };
+/* Old saved states used a 4-digit PIN and no username — upgrade them in place. */
+const slugUser = (name) => (name || "user").toLowerCase().replace(/[^a-z0-9]+/g, ".").replace(/(^\.)|(\.$)/g, "");
+const migrateState = (st) => ({
+  ...st,
+  users: (st.users || []).map((u) => ({ ...u, username: u.username || slugUser(u.name), password: u.password || u.pin || "0000" })),
+});
+
+/* ================= LIVE SYNC (shared workspace via Firebase Firestore) =================
+   When the Owner pastes a Firebase config in Team & Access, every device reads and
+   writes one shared Firestore document and receives everyone else's changes live.
+   Without a config the app runs standalone on this device (localStorage). */
+const FB_KEY = "kkbp-firebase-config";
+const loadFbConfig = () => { try { return JSON.parse(localStorage.getItem(FB_KEY) || "null"); } catch (e) { return null; } };
+const saveFbConfig = (cfg) => { try { if (cfg) localStorage.setItem(FB_KEY, JSON.stringify(cfg)); else localStorage.removeItem(FB_KEY); } catch (e) {} };
+const CLIENT_ID = Math.random().toString(36).slice(2, 10);
+let fbDocRef = null, fbSetDoc = null;
+async function connectLive(cfg, onSnap) {
+  const { initializeApp } = await import("firebase/app");
+  const { getFirestore, doc, onSnapshot, setDoc } = await import("firebase/firestore");
+  const app = initializeApp(cfg);
+  const db = getFirestore(app);
+  fbDocRef = doc(db, "kkbp", "state");
+  fbSetDoc = setDoc;
+  return onSnapshot(fbDocRef,
+    (snap) => {
+      const d = snap.data();
+      onSnap({ exists: !!(d && d.data), by: d ? d.by : null, data: d ? d.data : null });
+    },
+    (err) => { console.error("live sync error", err); onSnap({ error: true }); });
+}
+async function pushLive(state) {
+  if (!fbDocRef || !fbSetDoc) return false;
+  try { await fbSetDoc(fbDocRef, { data: JSON.stringify(state), by: CLIENT_ID, ts: Date.now() }); return true; }
+  catch (e) { console.error("live save failed", e); return false; }
+}
+
 const loadApiKey = () => { if (IS_CLOUD) return ""; try { return localStorage.getItem("kkbp-anthropic-key") || ""; } catch (e) { return ""; } };
 const storeApiKey = (k) => { if (!IS_CLOUD) { try { localStorage.setItem("kkbp-anthropic-key", k); } catch (e) {} } };
 const freshState = () => ({
@@ -395,76 +431,55 @@ const SectionTitle = ({ eyebrow, title, sub, accent }) => (
 
 
 /* ================= LOGIN ================= */
-function Login({ users, onLogin }) {
-  const [sel, setSel] = useState(null);
-  const [pin, setPin] = useState("");
+function Login({ users, onLogin, liveOn }) {
+  const [un, setUn] = useState("");
+  const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
   const tryLogin = () => {
-    const u = users.find((x) => x.id === sel);
-    if (!u) return;
-    if (pin === u.pin) onLogin(u);
-    else { setErr("Incorrect PIN. Ask the Owner if you need a reset."); setPin(""); }
+    const u = users.find((x) => (x.username || "").toLowerCase() === un.trim().toLowerCase());
+    if (!u || (u.password || "") !== pw) {
+      setErr("Incorrect username or password. Ask the Owner if you need a reset.");
+      setPw("");
+      return;
+    }
+    onLogin(u);
   };
-  const deptOrder = ["exec","leasing","marketing","project","design","admin"];
   return (
-    <div style={{ minHeight: "100vh", background: `radial-gradient(1200px 600px at 70% -10%, #1A2330 0%, ${C.bg} 55%)`, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 20px", fontFamily: SANS }}>
-      <div style={{ width: "100%", maxWidth: 960 }}>
+    <div style={{ minHeight: "100vh", background: `radial-gradient(1200px 600px at 70% -10%, #1A2330 0%, ${C.bg} 55%)`, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px", fontFamily: SANS }}>
+      <div style={{ width: "100%", maxWidth: 400 }}>
         <div style={{ textAlign: "center", marginBottom: 26 }}>
           <div style={{ width: 54, height: 54, margin: "0 auto 14px", borderRadius: 12, border: `1px solid ${C.gold}66`, display: "flex", alignItems: "center", justifyContent: "center", background: "#161D27" }}>
             <Landmark size={26} color={C.gold} />
           </div>
           <div style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: C.gold }}>Karan Kothari Business Park</div>
           <div style={{ fontFamily: SERIF, fontSize: 34, color: C.text, marginTop: 6 }}>KKBP Team OS</div>
-          <div style={{ color: C.mute, fontSize: 13, marginTop: 6 }}>The official channel. Choose your seat at the table.</div>
+          <div style={{ color: C.mute, fontSize: 13, marginTop: 6 }}>The official channel. Sign in to take your seat.</div>
         </div>
 
-        {deptOrder.map((d) => {
-          const dUsers = users.filter((u) => u.dept === d);
-          if (!dUsers.length) return null;
-          const D = DEPTS[d];
-          return (
-            <div key={d} style={{ marginBottom: 18 }}>
-              <div style={{ fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", color: D.accent, marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ width: 18, height: 1, background: D.accent, display: "inline-block" }} />{D.label}
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: 8 }}>
-                {dUsers.map((u) => {
-                  const active = sel === u.id;
-                  return (
-                    <div key={u.id} onClick={() => { setSel(u.id); setErr(""); }} style={{
-                      cursor: "pointer", background: active ? C.panel2 : C.panel, border: `1px solid ${active ? D.accent : C.line}`,
-                      borderRadius: 10, padding: "11px 12px",
-                    }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{ width: 32, height: 32, flexShrink: 0, borderRadius: 8, background: `${D.accent}22`, border: `1px solid ${D.accent}55`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: D.accent }}>{D.short}</div>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ color: C.text, fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.name}</div>
-                          <div style={{ color: C.mute, fontSize: 10.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.subRole}</div>
-                        </div>
-                        {isExternal(u) && <div style={{ marginLeft: "auto", flexShrink: 0 }}><Badge text="EXT" color={C.purple} /></div>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-
-        {sel && (
-          <div style={{ maxWidth: 360, width: "100%", margin: "10px auto 0", background: C.panel, border: `1px solid ${C.line}`, borderRadius: 10, padding: 18 }}>
-            <Field label={`PIN — ${(users.find((u) => u.id === sel) || {}).name}`}>
-              <div style={{ display: "flex", gap: 8 }}>
-                <Inp type="password" inputMode="numeric" maxLength={4} value={pin} autoFocus
-                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                  onKeyDown={(e) => e.key === "Enter" && tryLogin()} placeholder="••••" />
-                <Btn onClick={tryLogin}><KeyRound size={14} /> Enter</Btn>
-              </div>
+        <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, padding: 22 }}>
+          <Field label="Username">
+            <Inp value={un} autoFocus autoCapitalize="none" autoCorrect="off" spellCheck={false}
+              onChange={(e) => { setUn(e.target.value); setErr(""); }}
+              onKeyDown={(e) => e.key === "Enter" && tryLogin()} placeholder="e.g. rishi" />
+          </Field>
+          <div style={{ marginTop: 14 }}>
+            <Field label="Password">
+              <Inp type="password" value={pw}
+                onChange={(e) => { setPw(e.target.value); setErr(""); }}
+                onKeyDown={(e) => e.key === "Enter" && tryLogin()} placeholder="••••••••" />
             </Field>
-            {err && <div style={{ color: C.red, fontSize: 12, marginTop: 8 }}>{err}</div>}
-            <div style={{ color: C.faint, fontSize: 11, marginTop: 10 }}>Default PINs are listed in Team & Access (Owner). Change them on first run.</div>
           </div>
-        )}
+          {err && <div style={{ color: C.red, fontSize: 12, marginTop: 12 }}>{err}</div>}
+          <div style={{ marginTop: 18 }}>
+            <Btn onClick={tryLogin} disabled={!un.trim() || !pw}><KeyRound size={14} /> Sign in</Btn>
+          </div>
+          <div style={{ color: C.faint, fontSize: 11, marginTop: 14, lineHeight: 1.6 }}>
+            Usernames and passwords are managed by the Owner under Team &amp; Access. Change the defaults on first run.
+          </div>
+        </div>
+        <div style={{ textAlign: "center", fontSize: 11, color: liveOn ? C.green : C.faint, marginTop: 14 }}>
+          {liveOn ? "● Live shared workspace connected" : "Standalone mode — data stays on this device until the Owner connects the shared workspace."}
+        </div>
       </div>
     </div>
   );
@@ -2228,11 +2243,14 @@ function Constitution({ state, setState, user }) {
 }
 
 /* ================= TEAM & ACCESS ================= */
-function Team({ state, setState, user }) {
+function Team({ state, setState, user, liveStatus }) {
   const [edit, setEdit] = useState(null);
+  const [cfgText, setCfgText] = useState("");
   const canWrite = isOwner(user);
   const save = () => {
-    const rec = { ...edit, id: edit.id || uid() };
+    const un = (edit.username || "").trim().toLowerCase();
+    if (state.users.some((u) => u.id !== edit.id && (u.username || "").toLowerCase() === un)) return alert("That username is already in use.");
+    const rec = { ...edit, username: un, id: edit.id || uid() };
     setState((s) => withLog(
       { ...s, users: edit.id ? s.users.map((u) => (u.id === edit.id ? rec : u)) : [...s.users, rec] },
       user.name, `${edit.id ? "updated" : "added"} team member ${rec.name}`));
@@ -2273,7 +2291,7 @@ function Team({ state, setState, user }) {
           <input type="file" accept="application/json" style={{ display: "none" }} onChange={importJson} />
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", background: "transparent", color: C.gold, border: `1px solid ${C.gold}66`, borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, fontFamily: SANS }}><FileAudio size={14} style={{display:"none"}} /><Download size={14} style={{ transform: "rotate(180deg)" }} /> Import JSON</span>
         </label>}
-        {canWrite && <Btn onClick={() => setEdit({ id: "", name: "", dept: "leasing", subRole: "", tier: "member", pin: "" })}><Plus size={14} /> Add member</Btn>}
+        {canWrite && <Btn onClick={() => setEdit({ id: "", name: "", dept: "leasing", subRole: "", tier: "member", username: "", password: "" })}><Plus size={14} /> Add member</Btn>}
       </div>
       {deptOrder.map((d) => {
         const dUsers = state.users.filter((u) => u.dept === d);
@@ -2282,14 +2300,15 @@ function Team({ state, setState, user }) {
         return (
           <Card key={d} title={<span style={{ color: D.accent }}>{D.label}</span>} style={{ marginBottom: 12 }} pad={0}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead><tr><Th>Member</Th><Th>Sub-role</Th><Th>Tier</Th><Th>PIN</Th>{canWrite && <Th right>Actions</Th>}</tr></thead>
+              <thead><tr><Th>Member</Th><Th>Sub-role</Th><Th>Tier</Th><Th>Username</Th><Th>Password</Th>{canWrite && <Th right>Actions</Th>}</tr></thead>
               <tbody>
                 {dUsers.map((u) => (
                   <tr key={u.id}>
                     <Td style={{ fontWeight: 600 }}>{u.name}{u.exec && <span style={{ color: C.gold, fontSize: 11, marginLeft: 6 }}>({u.exec})</span>}</Td>
                     <Td style={{ color: C.mute, fontSize: 12 }}>{u.subRole}</Td>
                     <Td><Badge text={TIERS[u.tier]?.label || u.tier} color={TIERS[u.tier]?.color || C.faint} /></Td>
-                    <Td style={{ color: C.mute }}>{canWrite ? u.pin : "••••"}</Td>
+                    <Td style={{ color: C.mute, fontSize: 12 }}>{u.username}</Td>
+                    <Td style={{ color: C.mute }}>{canWrite ? u.password : "••••••"}</Td>
                     {canWrite && <Td right>
                       <Pencil size={14} color={C.mute} style={{ cursor: "pointer", marginRight: 12 }} onClick={() => setEdit({ ...u })} />
                       <Trash2 size={14} color={C.red} style={{ cursor: "pointer" }} onClick={() => del(u.id)} />
@@ -2301,9 +2320,50 @@ function Team({ state, setState, user }) {
           </Card>
         );
       })}
+      {canWrite && (
+        <Card title="Live shared workspace" style={{ marginBottom: 12, maxWidth: 760 }}>
+          <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.65 }}>
+            Status:{" "}
+            <Badge text={liveStatus === "on" ? "Connected — every device updates live" : liveStatus === "connecting" ? "Connecting…" : liveStatus === "error" ? "Configured, but unreachable" : "Not connected — data stays on each device"} color={liveStatus === "on" ? C.green : liveStatus === "error" ? C.red : C.amber} />
+          </div>
+          {!loadFbConfig() ? (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.7 }}>
+                One-time setup (about 5 minutes, free): 1) Go to <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer" style={{ color: C.blue }}>console.firebase.google.com</a> and create a project. 2) Build → Firestore Database → Create database → Start in <b>test mode</b>. 3) Project settings → Your apps → Web app → register, then copy the <b>firebaseConfig</b> block. 4) Paste it below on <b>every device</b> that should share data.
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <Ta rows={5} value={cfgText} onChange={(e) => setCfgText(e.target.value)} placeholder={'Paste the firebaseConfig here, e.g.\n{ apiKey: "AIza…", authDomain: "kkbp.firebaseapp.com", projectId: "kkbp-…", … }'} />
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <Btn disabled={!cfgText.trim()} onClick={() => {
+                  try {
+                    const m = cfgText.match(/\{[\s\S]*\}/);
+                    if (!m) throw new Error("no object");
+                    const cfg = Function('"use strict"; return (' + m[0] + ")")();
+                    if (!cfg || !cfg.apiKey || !cfg.projectId) throw new Error("missing keys");
+                    saveFbConfig(cfg);
+                    alert("Saved. The app will reload and connect to the shared workspace.");
+                    location.reload();
+                  } catch (err) {
+                    alert("That doesn't look like a valid Firebase config. Paste the whole firebaseConfig block, including the { } braces.");
+                  }
+                }}><LinkIcon size={14} /> Connect shared workspace</Btn>
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <div style={{ fontSize: 12.5, color: C.mute }}>Project: <span style={{ color: C.text }}>{(loadFbConfig() || {}).projectId}</span></div>
+              <Btn small ghost tone={C.red} onClick={() => { if (confirm("Disconnect this device from the shared workspace? Data stays in the cloud; this device goes standalone.")) { saveFbConfig(null); location.reload(); } }}>Disconnect this device</Btn>
+            </div>
+          )}
+          <div style={{ fontSize: 11.5, color: C.faint, marginTop: 12, lineHeight: 1.6 }}>
+            All connected devices share one live dataset — edits appear everywhere within a second or two. Keep the config internal: anyone holding it can reach the data while the database is in test mode.
+          </div>
+        </Card>
+      )}
       <div style={{ fontSize: 12, color: C.faint, marginTop: 4, maxWidth: 760, lineHeight: 1.6 }}>
         <AlertTriangle size={12} style={{ verticalAlign: -1, marginRight: 5 }} color={C.amber} />
-        PIN access is a gate for day-to-day discipline, not bank-grade security — anyone with the app link shares the same underlying data store, and confidential registers should be treated accordingly. For hard isolation of agencies and brokers, the next step is the real backend (FastAPI + Postgres) with server-side auth; this schema maps to it 1:1.
+        Password access is a gate for day-to-day discipline, not bank-grade security — anyone with the app link shares the same underlying data store, and confidential registers should be treated accordingly. For hard isolation of agencies and brokers, the next step is a real backend with server-side auth; this schema maps to it 1:1.
       </div>
 
       {edit && (
@@ -2321,11 +2381,12 @@ function Team({ state, setState, user }) {
                 {Object.entries(TIERS).map(([k, t]) => <option key={k} value={k}>{t.label}</option>)}
               </select>
             </Field>
-            <Field label="4-digit PIN"><Inp maxLength={4} value={edit.pin} onChange={(e) => setEdit({ ...edit, pin: e.target.value.replace(/\D/g, "") })} /></Field>
+            <Field label="Username"><Inp value={edit.username} autoCapitalize="none" onChange={(e) => setEdit({ ...edit, username: e.target.value.toLowerCase().replace(/\s+/g, ".") })} placeholder="e.g. leasing.head" /></Field>
+            <Field label="Password (min 4 characters)"><Inp value={edit.password} onChange={(e) => setEdit({ ...edit, password: e.target.value })} /></Field>
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
             <Btn ghost onClick={() => setEdit(null)}>Cancel</Btn>
-            <Btn onClick={save} disabled={!edit.name || (edit.pin || "").length !== 4}>Save member</Btn>
+            <Btn onClick={save} disabled={!edit.name || !(edit.username || "").trim() || (edit.password || "").length < 4}>Save member</Btn>
           </div>
         </Modal>
       )}
@@ -2341,6 +2402,8 @@ export default function App() {
   const [saveTick, setSaveTick] = useState("");
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
   const [navOpen, setNavOpen] = useState(false);
+  const [liveStatus, setLiveStatus] = useState(loadFbConfig() ? "connecting" : "off"); // off | connecting | on | error
+  const remoteApply = React.useRef(false);
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 768);
@@ -2349,18 +2412,54 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    (async () => {
-      const loaded = await loadState();
-      const full = loaded ? { ...freshState(), ...loaded } : freshState();
-      setState(full);
-      if (!loaded) await saveState(full);
+    let booted = false;
+    const finishBoot = (st, fromRemote) => {
+      if (fromRemote) remoteApply.current = true;
+      setState(st);
+      if (booted) return;
+      booted = true;
       const sess = loadSession();
       if (sess) {
-        const u = full.users.find((x) => x.id === sess.userId);
+        const u = st.users.find((x) => x.id === sess.userId);
         if (u) {
           setUser(u);
           if (sess.page && PAGES.some((pg) => pg.key === sess.page && pageAllowed(pg, u))) setPage(sess.page);
         }
+      }
+    };
+    (async () => {
+      const loaded = await loadState();
+      const base = migrateState(loaded ? { ...freshState(), ...loaded } : freshState());
+      const cfg = loadFbConfig();
+      if (!cfg) {
+        finishBoot(base, false);
+        if (!loaded) await saveState(base);
+        return;
+      }
+      /* Live mode: wait for the first shared snapshot so a joining device
+         never overwrites the team's data with its own local copy. */
+      let first = true;
+      const fallback = setTimeout(() => { if (first) { first = false; setLiveStatus("error"); finishBoot(base, false); } }, 8000);
+      try {
+        await connectLive(cfg, (msg) => {
+          if (msg.error) { clearTimeout(fallback); if (first) { first = false; finishBoot(base, false); } setLiveStatus("error"); return; }
+          if (first) {
+            first = false;
+            clearTimeout(fallback);
+            setLiveStatus("on");
+            if (msg.exists) {
+              try { finishBoot(migrateState({ ...freshState(), ...JSON.parse(msg.data) }), true); return; } catch (e) {}
+            }
+            finishBoot(base, false); /* first device ever seeds the shared workspace */
+            return;
+          }
+          if (msg.by === CLIENT_ID || !msg.exists) return;
+          try { finishBoot(migrateState({ ...freshState(), ...JSON.parse(msg.data) }), true); } catch (e) {}
+        });
+      } catch (e) {
+        console.error("live connect failed", e);
+        clearTimeout(fallback);
+        if (first) { first = false; setLiveStatus("error"); finishBoot(base, false); }
       }
     })();
   }, []);
@@ -2369,9 +2468,11 @@ export default function App() {
 
   useEffect(() => {
     if (!state) return;
+    if (remoteApply.current) { remoteApply.current = false; saveState(state); return; } /* cache remote copy locally, don't echo it back */
     const t = setTimeout(async () => {
-      const ok = await saveState(state);
-      setSaveTick(ok ? "✓ Saved" : "⚠ Save failed");
+      const okLocal = await saveState(state);
+      const okLive = liveStatus === "on" ? await pushLive(state) : true;
+      setSaveTick(okLocal && okLive ? "✓ Saved" : "⚠ Save failed");
       setTimeout(() => setSaveTick(""), 2000);
     }, 600);
     return () => clearTimeout(t);
@@ -2380,7 +2481,7 @@ export default function App() {
   if (!state) {
     return <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", color: C.mute, fontFamily: SANS, fontSize: 14 }}>Loading KKBP Team OS…</div>;
   }
-  if (!user) return <Login users={state.users} onLogin={(u) => { setUser(u); setPage("overview"); saveSession({ userId: u.id, page: "overview" }); }} />;
+  if (!user) return <Login users={state.users} liveOn={liveStatus === "on"} onLogin={(u) => { setUser(u); setPage("overview"); saveSession({ userId: u.id, page: "overview" }); }} />;
 
   const D = DEPTS[user.dept];
   const myPages = PAGES.filter((p) => pageAllowed(p, user));
@@ -2401,7 +2502,7 @@ export default function App() {
     documents: <Documents state={state} setState={setState} user={user} />,
     meetings: <MeetingStudio state={state} setState={setState} user={user} />,
     constitution: <Constitution state={state} setState={setState} user={user} />,
-    team: <Team state={state} setState={setState} user={user} />,
+    team: <Team state={state} setState={setState} user={user} liveStatus={liveStatus} />,
   }[page] || <Overview state={state} setState={setState} user={user} goTo={setPage} />;
 
   return (
@@ -2427,7 +2528,7 @@ export default function App() {
             </div>
             <div>
               <div style={{ fontFamily: SERIF, fontSize: 15, color: C.text }}>KKBP Team OS</div>
-              <div style={{ fontSize: 10, color: C.faint, letterSpacing: 1, textTransform: "uppercase" }}>{IS_CLOUD ? "Official channel" : "Standalone · this device"}</div>
+              <div style={{ fontSize: 10, color: liveStatus === "on" ? C.green : C.faint, letterSpacing: 1, textTransform: "uppercase" }}>{IS_CLOUD ? "Official channel" : liveStatus === "on" ? "● Live · shared" : liveStatus === "connecting" ? "Connecting…" : liveStatus === "error" ? "Live sync offline" : "Standalone · this device"}</div>
             </div>
           </div>
         </div>

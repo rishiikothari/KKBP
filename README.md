@@ -25,9 +25,10 @@ npm run preview   # serves the built app locally
 
 ## How to use the app
 
-1. **Log in** — pick your seat on the login screen and enter your 4-digit PIN.
-   Default PINs ship with the seed data and are visible to the Owner under
-   **Team & Access** (Owner login: *Rishi Kothari*, PIN `7001`). Change them on first run.
+1. **Log in** — enter your username and password. Defaults ship with the seed data
+   and are visible to the Owner under **Team & Access** (Owner login: username
+   `rishi`, password `7001`; every other seat's default password equals their old
+   4-digit PIN). Change all of them on first run.
 2. **Daily pages** — everyone gets Overview (your KPIs + open work), Tasks (kanban),
    Approvals (money moves only through here, routed per the Delegation of Authority),
    and Announcements.
@@ -64,20 +65,34 @@ and can attach a custom domain later.
 `npm run build`, then copy the `dist/` folder anywhere that can serve files.
 The build uses relative paths, so it works from any folder or subpath.
 
-## Where the data lives (important)
+## Live updates — one shared workspace for the whole team
 
-This build stores all data in **each device's browser** (localStorage) — there is no
-shared database yet. Practical implications:
+Out of the box the app runs standalone (data stays in each device's browser).
+To make every device share one live dataset — edits appear everywhere within a
+second or two — connect the free Firebase backend once:
 
-- Each person's device keeps its own copy of the data.
-- To move data between devices, use **Team & Access → Export all data (JSON)** and
-  **Import JSON** (Owner only). Treat the export as your backup.
-- The PIN screen is a discipline gate, not security — anyone with the link can open
-  the app shell. Keep the URL internal.
+1. Go to [console.firebase.google.com](https://console.firebase.google.com) and
+   create a project (any name, Analytics off is fine).
+2. **Build → Firestore Database → Create database → Start in test mode.**
+3. **Project settings (gear) → Your apps → Web app (`</>`)** → register it, then
+   copy the `firebaseConfig = { … }` block it shows you.
+4. In the app, log in as Owner → **Team & Access → Live shared workspace** →
+   paste the config → **Connect shared workspace**.
+5. Repeat step 4 (paste + connect) on every device that should share data —
+   or just send teammates the config block to paste once.
 
-The register schema is deliberately designed to map 1:1 onto a real backend
-(FastAPI + Postgres with server-side auth) when the team is ready for shared,
-access-controlled data.
+The sidebar shows **● Live · shared** when connected. The first connected device
+seeds the cloud with its data; after that the cloud copy wins everywhere.
+
+Notes:
+- Everything still saves locally too, so a device that drops offline keeps working
+  and the Export/Import JSON buttons remain your backup.
+- Test-mode Firestore rules are open — treat the config block like a key and keep
+  it internal. Firebase will email you to extend the rules after 30 days; set the
+  rule expiry far out or switch rules to `allow read, write: if true;` knowingly.
+- The login screen is a discipline gate, not bank-grade security. For hard
+  per-role isolation the next step is a real backend with server-side auth;
+  the register schema maps to it 1:1.
 
 ## Project layout
 
