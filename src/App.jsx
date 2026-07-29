@@ -79,24 +79,30 @@ const canWritePage = (key, u) => {
 const CMA_TARGET_L = 541;
 
 const SEED_USERS = [
-  { id: "u1",  name: "Rishi Kothari",        dept: "exec",      subRole: "Owner / Promoter",                 tier: "head",     exec: "owner", username: "rishi",                  password: "7001" },
-  { id: "u2",  name: "CEO",                  dept: "exec",      subRole: "Chief Executive Officer",          tier: "head",     exec: "ceo",   username: "ceo",                    password: "7002" },
-  { id: "u3",  name: "Leasing Head",         dept: "leasing",   subRole: "Head of Leasing",                  tier: "head",     username: "leasing.head",           password: "7003" },
-  { id: "u4",  name: "Leasing Executive",    dept: "leasing",   subRole: "Leasing Executive",                tier: "member",   username: "leasing.exec",           password: "7103" },
-  { id: "u5",  name: "Channel Partner",      dept: "leasing",   subRole: "Broker / Channel Partner",         tier: "external", username: "channel.partner",        password: "7203" },
-  { id: "u6",  name: "Marketing Head",       dept: "marketing", subRole: "Head of Marketing",                tier: "head",     username: "marketing.head",         password: "7004" },
-  { id: "u7",  name: "Content Executive",    dept: "marketing", subRole: "In-house Content Team",            tier: "member",   username: "content.exec",           password: "7104" },
-  { id: "u8",  name: "Marketing Intern",     dept: "marketing", subRole: "Intern — KKBP",                    tier: "member",   username: "marketing.intern",       password: "7114" },
-  { id: "u9",  name: "INIT — Copywriter",    dept: "marketing", subRole: "INIT Design Studio · Copywriting", tier: "external", username: "init.copy",              password: "7124" },
-  { id: "u10", name: "INIT — Designer",      dept: "marketing", subRole: "INIT Design Studio · Design",      tier: "external", username: "init.design",            password: "7134" },
-  { id: "u11", name: "OCDS — Digital",       dept: "marketing", subRole: "OCDS Design Studio · Digital Media", tier: "external", username: "ocds.digital",           password: "7144" },
-  { id: "u12", name: "Admin Head",           dept: "admin",     subRole: "Head of Admin & Operations",       tier: "head",     username: "admin.head",             password: "7005" },
-  { id: "u13", name: "Facility Executive",   dept: "admin",     subRole: "Facility & Vendor Management",     tier: "member",   username: "facility.exec",          password: "7105" },
-  { id: "u14", name: "Project Head",         dept: "project",   subRole: "Head of Projects",                 tier: "head",     username: "project.head",           password: "7006" },
-  { id: "u15", name: "Site Engineer",        dept: "project",   subRole: "Site Engineering",                 tier: "member",   username: "site.engineer",          password: "7106" },
-  { id: "u16", name: "Principal Architect",  dept: "design",    subRole: "Principal Architect",              tier: "head",     username: "architect",              password: "7007" },
-  { id: "u17", name: "MEP Consultant",       dept: "design",    subRole: "MEP Consultant (HVAC/Elec/PHE)",   tier: "external", username: "mep.consultant",         password: "7107" },
-  { id: "u18", name: "Structural Consultant",dept: "design",    subRole: "Structural Consultant",            tier: "external", username: "structural.consultant",  password: "7117" },
+  { id:"u1", name:"Rishi Kothari", dept:"exec", subRole:"Owner / Promoter \u00b7 IT & Digital (Director, rishi@kkjpl.com)", tier:"head", exec:"owner", username:"rishi", password:"7001" },
+  { id:"u2", name:"Nitin Kothari", dept:"exec", subRole:"Managing Director \u00b7 Final authority on layouts, anchors & name (nitin@kkjpl.com)", tier:"head", exec:"ceo", username:"nitin", password:"7002" },
+  { id:"u3", name:"Arjun Kothari", dept:"exec", subRole:"Promoter \u00b7 Brand & PR direction", tier:"head", username:"arjun", password:"7003" },
+  { id:"u4", name:"Manoj Agarwal", dept:"exec", subRole:"Project Director \u2014 MKA \u00b7 Runs weekly cadence, CAM & sign-offs", tier:"head", username:"manoj", password:"7004" },
+  { id:"u5", name:"Sushil Ahuja", dept:"leasing", subRole:"Head of Leasing \u00b7 Consultant, Delhi (dedicated to TTJ since 1 Jun)", tier:"head", username:"sushil", password:"7005" },
+  { id:"u6", name:"Rateesh", dept:"leasing", subRole:"Leasing Consultant \u2014 Chennai \u00b7 South-India brand pipeline", tier:"external", username:"rateesh", password:"7006" },
+  { id:"u7", name:"Basha", dept:"leasing", subRole:"Leasing Coordinator \u2014 Nagpur \u00b7 On-ground client visits", tier:"member", username:"basha", password:"7007" },
+  { id:"u8", name:"Mayur", dept:"leasing", subRole:"Sales \u2014 Leasing enquiries", tier:"member", username:"mayur", password:"7008" },
+  { id:"u9", name:"Priyanka Thakur", dept:"marketing", subRole:"Head of Marketing", tier:"head", username:"priyanka", password:"7009" },
+  { id:"u10", name:"Kirti Chaturvedi", dept:"marketing", subRole:"INIT Design Studio \u00b7 Creative & account lead (brochure, decks, VAMOS, shoot)", tier:"external", username:"kirti", password:"7010" },
+  { id:"u11", name:"Rajvi Merchant", dept:"marketing", subRole:"INIT Design Studio \u00b7 Brand strategy & nomenclature lead", tier:"external", username:"rajvi", password:"7011" },
+  { id:"u12", name:"Jeetu Surana", dept:"admin", subRole:"Head of Admin & Ops \u00b7 FEC Game Zone (Hyderabad)", tier:"head", username:"jeetu", password:"7012" },
+  { id:"u13", name:"Narayan", dept:"project", subRole:"Site Team \u2014 Nagpur \u00b7 Civil execution", tier:"member", username:"narayan", password:"7013" },
+  { id:"u14", name:"Prashant (Site)", dept:"project", subRole:"Site Engineer \u00b7 External development (trench, RWP, painting)", tier:"member", username:"prashant", password:"7014" },
+  { id:"u15", name:"Mahesh Gupta", dept:"project", subRole:"Liaison \u00b7 DP road / NIT / NMC & advertisement permissions", tier:"external", username:"mahesh", password:"7015" },
+  { id:"u16", name:"Pratham Pincha", dept:"project", subRole:"Sanctioning & approvals consultant", tier:"external", username:"pratham", password:"7016" },
+  { id:"u17", name:"Aniket Satone", dept:"design", subRole:"Principal Architect \u2014 In-house \u00b7 Drawings, RFIs, coordination (development@kkbp.in)", tier:"head", username:"aniket", password:"7017" },
+  { id:"u18", name:"Aviral (Lokre)", dept:"design", subRole:"Architect \u2014 Lokre, Ahmedabad \u00b7 External development, masterplan & signage", tier:"external", username:"aviral", password:"7018" },
+  { id:"u19", name:"Shah Chintan", dept:"design", subRole:"MEP Consultant \u2014 Jhaveri Associates (HVAC / electrical / CCTV)", tier:"external", username:"chintan", password:"7019" },
+  { id:"u20", name:"Samir Diwanji", dept:"design", subRole:"Plumbing & Drainage \u2014 Jhaveri Associates", tier:"external", username:"samir", password:"7020" },
+  { id:"u21", name:"Paresh Padole", dept:"design", subRole:"Electrical Consultant \u00b7 Transformers & liaisoning", tier:"external", username:"paresh", password:"7021" },
+  { id:"u22", name:"Karna Shah", dept:"marketing", subRole:"INIT Design Studio \u00b7 PR & partnerships lead", tier:"external", username:"karna", password:"7022" },
+  { id:"u23", name:"Sumit Bhaiya", dept:"admin", subRole:"KKBP Staff \u2014 Logistics & deliveries (Nagpur)", tier:"member", username:"sumit", password:"7023" },
+  { id:"u24", name:"Robin (INIT)", dept:"marketing", subRole:"INIT Design Studio \u00b7 Brand strategy (Singapore)", tier:"external", username:"robin", password:"7024" },
 ];
 
 const TENANT_CATS = ["Anchor Retail","Anchor Brand","Vanilla Retail","F&B","Entertainment","Department Store","Services","Pool / Unallocated"];
@@ -104,127 +110,40 @@ const DEALS = ["Pure Rent","Rev Share (area)","MRG + Rev Share","Rev Share (turn
 const TSTATUS = ["Lead","LOI Signed","Agreement","Fit-out","Operational","On Hold"];
 const TSTATUS_COLOR = { "Lead": C.faint, "LOI Signed": C.blue, "Agreement": C.purple, "Fit-out": C.amber, "Operational": C.green, "On Hold": C.red };
 
-const SEED_TENANTS = [
-  { id:"T1", name:"KKJPL + Parekh", category:"Anchor Retail", area:50000, deal:"Pure Rent", rent:100, density:0, share:0, mrg:0, salesL:0, status:"Operational", floor:"Ground", poc:"", notes:"Group anchor — jewellery flagship." },
-  { id:"T2", name:"Rochaldas", category:"Anchor Retail", area:50000, deal:"Pure Rent", rent:22, density:0, share:0, mrg:0, salesL:0, status:"Agreement", floor:"First", poc:"", notes:"" },
-  { id:"T3", name:"Food Court", category:"F&B", area:10000, deal:"Pure Rent", rent:70, density:0, share:0, mrg:0, salesL:0, status:"Fit-out", floor:"Third", poc:"", notes:"Multi-counter FEC-adjacent food court." },
-  { id:"T4", name:"Ashish NX", category:"Department Store", area:0, deal:"Rev Share (turnover)", rent:0, density:0, share:8, mrg:0, salesL:500, status:"LOI Signed", floor:"Second", poc:"", notes:"8% of turnover, est. ₹500L/mo sales." },
-  { id:"T5", name:"Chunmun", category:"Anchor Brand", area:30000, deal:"Rev Share (area)", rent:0, density:1200, share:12, mrg:0, salesL:0, status:"Agreement", floor:"First", poc:"", notes:"12% share on ₹1,200/sft trade density." },
-  { id:"T6", name:"Other Brands — POOL", category:"Pool / Unallocated", area:350000, deal:"Rev Share (area)", rent:0, density:900, share:10, mrg:0, salesL:0, status:"Lead", floor:"Multiple", poc:"", notes:"Placeholder pool. Replace with signed leases as closed." },
-  { id:"T7", name:"Game Zone (Self-Op)", category:"Entertainment", area:25000, deal:"Self-Operated", rent:0, density:0, share:0, mrg:0, salesL:82, status:"Fit-out", floor:"Third", poc:"", notes:"FEC. ~273 footfall/day × ₹1,000 spend." },
-  { id:"T8", name:"Connplex Miniplex", category:"Entertainment", area:8000, deal:"Rev Share (turnover)", rent:0, density:0, share:15, mrg:0, salesL:107, status:"Agreement", floor:"Third", poc:"", notes:"4-screen miniplex. KKBP share of gross box collection." },
-];
+const SEED_TENANTS = [];
 
 const CAPEX_CATS = ["Civil & Structure","Facade & Exteriors","MEP (HVAC/Electrical/Plumbing)","Lifts & Escalators","Interiors & Common Areas","Game Zone Equipment","Multiplex Fit-out","Food Court Fit-out","IT, CCTV & Systems","FF&E & Signage","Parking & External Dev","Launch & Marketing Capex"];
 const CSTATUS = ["Planned","Approved","Tendered","In Progress","Complete"];
 const CSTATUS_COLOR = { Planned: C.faint, Approved: C.blue, Tendered: C.purple, "In Progress": C.amber, Complete: C.green };
 
-const SEED_CAPEX = [
-  { id:"C1", name:"Core civil works — towers & podium", category:"Civil & Structure", budgetL:5200, spentL:4680, status:"In Progress", owner:"Project Head", vendor:"", due:"2026-10-31", notes:"" },
-  { id:"C2", name:"Facade glazing & ACP", category:"Facade & Exteriors", budgetL:1400, spentL:520, status:"In Progress", owner:"Project Head", vendor:"", due:"2026-11-30", notes:"" },
-  { id:"C3", name:"HVAC central plant + distribution", category:"MEP (HVAC/Electrical/Plumbing)", budgetL:1800, spentL:610, status:"In Progress", owner:"Project Head", vendor:"", due:"2026-12-15", notes:"" },
-  { id:"C4", name:"Lifts & escalators package", category:"Lifts & Escalators", budgetL:950, spentL:190, status:"Tendered", owner:"Project Head", vendor:"", due:"2027-01-15", notes:"" },
-  { id:"C5", name:"Game zone arcade / VR equipment (import)", category:"Game Zone Equipment", budgetL:1500, spentL:0, status:"Approved", owner:"Owner", vendor:"Shenzhen suppliers", due:"2027-02-28", notes:"EPCG route under evaluation — clear licence before LC." },
-  { id:"C6", name:"Miniplex fit-out (Connplex spec)", category:"Multiplex Fit-out", budgetL:256, spentL:0, status:"Approved", owner:"Project Head", vendor:"Connplex", due:"2027-02-28", notes:"₹3,200/sft × 8,000 sft." },
-  { id:"C7", name:"Food court kitchens & seating", category:"Food Court Fit-out", budgetL:350, spentL:0, status:"Planned", owner:"Project Head", vendor:"", due:"2027-03-15", notes:"" },
-  { id:"C8", name:"CCTV, BMS, Wi-Fi & footfall counters", category:"IT, CCTV & Systems", budgetL:220, spentL:0, status:"Planned", owner:"Admin Head", vendor:"", due:"2027-03-31", notes:"" },
-  { id:"C9", name:"Signage, wayfinding & atrium FF&E", category:"FF&E & Signage", budgetL:180, spentL:0, status:"Planned", owner:"Marketing Head", vendor:"", due:"2027-03-31", notes:"" },
-  { id:"C10", name:"Launch campaign capex", category:"Launch & Marketing Capex", budgetL:150, spentL:0, status:"Planned", owner:"Marketing Head", vendor:"INIT Design Studio", due:"2027-04-15", notes:"North Nagpur. Next Nagpur." },
-];
+const SEED_CAPEX = [];
 
-const SEED_CAMPAIGNS = [
-  { id:"M1", name:"North Nagpur. Next Nagpur. — teaser", phase:"Pre-launch", channel:"OOH + Digital", start:"2026-09-01", end:"2026-11-30", budgetL:35, spentL:8, status:"In Progress", owner:"Marketing Head", kpi:"Reach 15L impressions" },
-  { id:"M2", name:"Anchor announcement series", phase:"Pre-launch", channel:"PR + Social", start:"2026-11-01", end:"2027-01-31", budgetL:20, spentL:0, status:"Planned", owner:"Marketing Head", kpi:"3 anchor reveals" },
-  { id:"M3", name:"Grand launch weekend", phase:"Launch", channel:"Event + Media", start:"2027-04-01", end:"2027-04-30", budgetL:60, spentL:0, status:"Planned", owner:"Marketing Head", kpi:"1L footfall in month 1" },
-  { id:"M4", name:"Game zone school-season drive", phase:"Post-launch", channel:"Schools + Digital", start:"2027-06-01", end:"2027-07-31", budgetL:12, spentL:0, status:"Planned", owner:"Marketing Head", kpi:"273 avg daily footfall" },
-];
+const SEED_CAMPAIGNS = [];
 
 const CONTENT_TYPES = ["Copy","Design / Creative","Digital Ad","Social Post","Video / Reel","PR / Article","OOH Artwork"];
 const CONTENT_STATUS = ["Brief","In Production","Internal Review","Head Approval","Approved","Published"];
 const CONTENT_COLOR = { Brief: C.faint, "In Production": C.amber, "Internal Review": C.blue, "Head Approval": C.purple, Approved: C.green, Published: C.teal };
-const SEED_CONTENT = [
-  { id:"CT1", title:"Teaser hoarding — Ring Road x2", type:"OOH Artwork", campaign:"North Nagpur. Next Nagpur. — teaser", assigneeId:"u10", due:"2026-07-20", status:"In Production", brief:"Hero line + skyline render, night-lit mock.", link:"" },
-  { id:"CT2", title:"Launch manifesto copy (EN + Marathi + Hindi)", type:"Copy", campaign:"North Nagpur. Next Nagpur. — teaser", assigneeId:"u9", due:"2026-07-15", status:"Internal Review", brief:"120 words. Aspirational, rooted in Nagpur pride.", link:"" },
-  { id:"CT3", title:"Instagram countdown grid — 9 posts", type:"Social Post", campaign:"Anchor announcement series", assigneeId:"u11", due:"2026-08-01", status:"Brief", brief:"OCDS to storyboard; reveal cadence with Leasing.", link:"" },
-  { id:"CT4", title:"Game zone walkthrough reel", type:"Video / Reel", campaign:"Grand launch weekend", assigneeId:"u7", due:"2026-09-10", status:"Brief", brief:"30s vertical; shoot after arcade install.", link:"" },
-];
+const SEED_CONTENT = [];
 
-const SEED_COMPLIANCE = [
-  { id:"A1", name:"Occupancy Certificate (OC)", authority:"NMC", due:"2027-02-28", status:"Open", owner:"Admin Head", type:"Statutory" },
-  { id:"A2", name:"Fire NOC — final", authority:"Fire Dept, Nagpur", due:"2027-01-31", status:"Open", owner:"Admin Head", type:"Statutory" },
-  { id:"A3", name:"Lift licences (all units)", authority:"PWD Inspectorate", due:"2027-02-15", status:"Open", owner:"Admin Head", type:"Statutory" },
-  { id:"A4", name:"FSSAI — food court master licence", authority:"FSSAI", due:"2027-03-01", status:"Open", owner:"Admin Head", type:"Statutory" },
-  { id:"A5", name:"Cinema operating licence", authority:"Collectorate", due:"2027-03-10", status:"Open", owner:"Admin Head", type:"Statutory" },
-  { id:"A6", name:"Amusement / game zone licence", authority:"Collectorate", due:"2027-03-10", status:"Open", owner:"Admin Head", type:"Statutory" },
-  { id:"A7", name:"Property insurance — CAR to operational", authority:"Insurer", due:"2027-03-31", status:"Open", owner:"Admin Head", type:"Commercial" },
-  { id:"A8", name:"DG set & pollution consent", authority:"MPCB", due:"2027-01-20", status:"Open", owner:"Admin Head", type:"Statutory" },
-];
-const SEED_VENDORS = [
-  { id:"V1", name:"Housekeeping agency", scope:"Mall housekeeping", contractL:6, cycle:"Monthly", status:"To Appoint", owner:"Admin Head" },
-  { id:"V2", name:"Security agency", scope:"24×7 security, 3 shifts", contractL:9, cycle:"Monthly", status:"To Appoint", owner:"Admin Head" },
-  { id:"V3", name:"HVAC AMC", scope:"Central plant O&M", contractL:2.5, cycle:"Monthly", status:"To Appoint", owner:"Admin Head" },
-  { id:"V4", name:"Lift AMC", scope:"Comprehensive AMC", contractL:1.5, cycle:"Monthly", status:"To Appoint", owner:"Admin Head" },
-];
-const SEED_DRAWINGS = [
-  { id:"D1", code:"KKBP-AR-GF-101", title:"Ground floor GFC plan", discipline:"Architecture", rev:"R3", status:"GFC Issued", date:"2026-05-12" },
-  { id:"D2", code:"KKBP-AR-FF-102", title:"First floor GFC plan", discipline:"Architecture", rev:"R2", status:"GFC Issued", date:"2026-05-12" },
-  { id:"D3", code:"KKBP-ST-PD-210", title:"Podium PT slab details", discipline:"Structure", rev:"R4", status:"GFC Issued", date:"2026-04-02" },
-  { id:"D4", code:"KKBP-MEP-HV-310", title:"HVAC ducting — 3rd floor FEC", discipline:"MEP", rev:"R1", status:"For Review", date:"2026-06-20" },
-  { id:"D5", code:"KKBP-ID-AT-401", title:"Atrium interiors concept", discipline:"Interiors", rev:"R0", status:"Concept", date:"2026-06-25" },
-];
-const SEED_RFIS = [
-  { id:"R1", title:"Escalator pit depth vs vendor spec mismatch", raisedBy:"Project Head", assignedTo:"Principal Architect", priority:"High", status:"Open", date:"2026-06-22" },
-  { id:"R2", title:"Miniplex acoustic wall detail — confirm STC rating", raisedBy:"Principal Architect", assignedTo:"MEP Consultant", priority:"Medium", status:"Open", date:"2026-06-28" },
-];
+const SEED_COMPLIANCE = [];
+const SEED_VENDORS = [];
+const SEED_DRAWINGS = [];
+const SEED_RFIS = [];
 
 const FLOORS = ["Lower Ground","Ground","First","Second","Third","Terrace"];
-const SEED_ZONES = [
-  { id:"Z1", floor:"Ground", name:"KKJPL + Parekh flagship", areaSft:50000, tenantId:"T1", use:"Anchor Retail" },
-  { id:"Z2", floor:"Ground", name:"High-street retail strip", areaSft:40000, tenantId:"T6", use:"Vanilla Retail" },
-  { id:"Z3", floor:"First", name:"Chunmun", areaSft:30000, tenantId:"T5", use:"Anchor Brand" },
-  { id:"Z4", floor:"First", name:"Rochaldas", areaSft:50000, tenantId:"T2", use:"Anchor Retail" },
-  { id:"Z5", floor:"First", name:"Vanilla retail — north wing", areaSft:30000, tenantId:"T6", use:"Vanilla Retail" },
-  { id:"Z6", floor:"Second", name:"Ashish NX", areaSft:45000, tenantId:"T4", use:"Department Store" },
-  { id:"Z7", floor:"Second", name:"Vanilla retail — south wing", areaSft:60000, tenantId:"T6", use:"Vanilla Retail" },
-  { id:"Z8", floor:"Third", name:"Game Zone (FEC)", areaSft:25000, tenantId:"T7", use:"Entertainment" },
-  { id:"Z9", floor:"Third", name:"Connplex Miniplex", areaSft:8000, tenantId:"T8", use:"Entertainment" },
-  { id:"Z10", floor:"Third", name:"Food Court", areaSft:10000, tenantId:"T3", use:"F&B" },
-  { id:"Z11", floor:"Lower Ground", name:"Parking + services", areaSft:80000, tenantId:null, use:"Services" },
-  { id:"Z12", floor:"Terrace", name:"Events terrace / F&B decks", areaSft:20000, tenantId:null, use:"F&B" },
-  { id:"Z13", floor:"Second", name:"Vacant — west block", areaSft:35000, tenantId:null, use:"Vanilla Retail" },
-];
+const SEED_ZONES = [];
 
-const SEED_TASKS = [
-  { id:"K1", title:"Convert Ashish NX LOI to agreement", dept:"leasing", assigneeId:"u3", createdById:"u2", due:"2026-07-15", priority:"High", status:"In Progress", notes:"Legal draft with tenant since 28 Jun." },
-  { id:"K2", title:"Rate card for vanilla retail — 2nd floor west block", dept:"leasing", assigneeId:"u4", createdById:"u3", due:"2026-07-10", priority:"Medium", status:"Open", notes:"" },
-  { id:"K3", title:"Teaser hoarding artwork — final files to printer", dept:"marketing", assigneeId:"u10", createdById:"u6", due:"2026-07-18", priority:"High", status:"Open", notes:"Pending Head Approval in Content Studio." },
-  { id:"K4", title:"Fire NOC — submit revised sprinkler layout", dept:"admin", assigneeId:"u12", createdById:"u2", due:"2026-07-12", priority:"High", status:"In Progress", notes:"Needs MEP consultant's stamped drawing." },
-  { id:"K5", title:"Escalator pit RFI — issue revised detail", dept:"design", assigneeId:"u16", createdById:"u14", due:"2026-07-08", priority:"High", status:"Open", notes:"Blocking lift package award." },
-  { id:"K6", title:"Monthly capex reconciliation — June", dept:"project", assigneeId:"u15", createdById:"u14", due:"2026-07-07", priority:"Medium", status:"Open", notes:"" },
-];
+const SEED_TASKS = [];
 
 const APPROVAL_TYPES = ["Capex / Purchase","Lease deviation","Campaign / Marketing spend","Admin / Ops expense","Design change order","Other"];
-const SEED_APPROVALS = [
-  { id:"P1", title:"Award lift & escalator package — L1 bidder", type:"Capex / Purchase", amountL:950, dept:"project", raisedById:"u14", status:"Pending", decidedById:null, dateRaised:"2026-07-01", dateDecided:"", notes:"L1 within budget. Pit RFI to close before mobilisation advance." },
-  { id:"P2", title:"Rent-free extension 90 days — 2nd floor F&B unit", type:"Lease deviation", amountL:0, dept:"leasing", raisedById:"u3", status:"Pending", decidedById:null, dateRaised:"2026-07-02", dateDecided:"", notes:"Beyond 60-day limit per constitution §4 — needs CEO + Owner." },
-  { id:"P3", title:"OCDS retainer — digital media, 6 months", type:"Campaign / Marketing spend", amountL:9, dept:"marketing", raisedById:"u6", status:"Pending", decidedById:null, dateRaised:"2026-07-03", dateDecided:"", notes:"₹1.5L/mo × 6." },
-];
+const SEED_APPROVALS = [];
 
-const SEED_ANNOUNCEMENTS = [
-  { id:"N1", title:"This dashboard is now the official channel", body:"From today, all tasks, approvals, briefs, MOMs and documents live here. If it is not in the system, it did not happen. WhatsApp is for alerts only — decisions and deliverables are recorded here.", byId:"u1", date:"2026-07-01", pinned:true },
-  { id:"N2", title:"Monday stand-up moves to 10:00 sharp", body:"Leadership stand-up every Monday 10:00, this dashboard on screen. Department heads present from their workspace pages. 30 minutes, hard stop.", byId:"u2", date:"2026-07-02", pinned:false },
-];
+const SEED_ANNOUNCEMENTS = [];
 
-const SEED_MEETINGS = [
-  { id:"G1", title:"Leadership stand-up — Week 27", date:"2026-06-29", dept:"exec", attendees:"Owner, CEO, all heads", mom:"Leasing: Ashish NX legal in progress. Projects: civil 90%, facade 37%. Marketing: teaser live on OOH. Admin: Fire NOC resubmission this week. Design: escalator pit RFI is the top blocker.", actions:"1) Architect to issue pit detail by 8 Jul. 2) Leasing to circulate 2F rate card by 10 Jul. 3) Admin to confirm NOC submission date." },
-];
+const SEED_MEETINGS = [];
 
 const DOC_CATS = ["Legal & Agreements","Bank & CMA","Design & Drawings","Marketing & Brand","Licences & Compliance","Vendor Contracts","MOMs & Reports","Other"];
-const SEED_DOCS = [
-  { id:"F1", name:"CMA — KKBP term loan (final)", dept:"exec", category:"Bank & CMA", url:"", addedById:"u1", date:"2026-05-01" },
-  { id:"F2", name:"Chunmun LOI — signed scan", dept:"leasing", category:"Legal & Agreements", url:"", addedById:"u3", date:"2026-06-10" },
-  { id:"F3", name:"Brand book — North Nagpur. Next Nagpur.", dept:"marketing", category:"Marketing & Brand", url:"", addedById:"u6", date:"2026-06-15" },
-];
+const SEED_DOCS = [];
 
 const CONSTITUTION = [
   { id: "S1", title: "1. Purpose", body: "Karan Kothari Business Park (KKBP) exists to build North Nagpur's defining commercial destination while protecting the Karan Kothari Group's capital, credit standing and four-decade reputation. Every decision is tested against three questions: does it serve the customer, does it protect DSCR, and would we be comfortable explaining it to our bankers." },
@@ -322,7 +241,7 @@ const freshState = () => ({
   tasks: SEED_TASKS, approvals: SEED_APPROVALS, announcements: SEED_ANNOUNCEMENTS,
   meetings: SEED_MEETINGS, docs: SEED_DOCS,
   aiKey: "",
-  log: [{ ts: Date.now(), by: "System", text: "KKBP Team OS v2 initialised — official channel live." }],
+  log: [{ ts: Date.now(), by: "System", text: "TTJ Team OS initialised — clean workspace, official channel live." }],
   acks: {}, constitutionVersion: 2,
 });
 
