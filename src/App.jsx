@@ -6,8 +6,9 @@ import {
   Landmark, KeyRound, ChevronRight, FileText, CalendarDays, Wrench, Search,
   ListChecks, Stamp, Bell, FolderOpen, NotebookPen, Send, ThumbsUp, ThumbsDown,
   Pin, Link as LinkIcon, Activity, Mic, Square, Sparkles, Loader2, FileAudio, MessageSquareText, Pause, Play,
-  Menu, Eye,
+  Menu, Eye, Upload, Film, Image as ImageIcon, FileCheck2,
 } from "lucide-react";
+import * as WA from "./importer.js";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
 } from "recharts";
@@ -64,6 +65,7 @@ const PAGES = [
   { key: "documents",    label: "Documents",          icon: FolderOpen,      group: "Records" },
   { key: "meetings",     label: "Meetings & AI Notes", icon: NotebookPen,     group: "Records" },
   { key: "constitution", label: "Constitution",       icon: ScrollText,      group: "Records" },
+  { key: "import",       label: "Import Studio",      icon: Upload,          group: "Records", owner: true },
   { key: "team",         label: "Team & Access",      icon: Users,           group: "Records", owner: true },
 ];
 /* `owner: true` pages (settings — team, API key, live workspace, import/export)
@@ -1638,7 +1640,7 @@ function Documents({ state, setState, user }) {
             <tbody>
               {visible.map((d) => (
                 <tr key={d.id}>
-                  <Td style={{ fontWeight: 600 }}>{d.name}</Td>
+                  <Td style={{ fontWeight: 600 }}>{d.name}{d.summary ? <div style={{ fontWeight: 400, fontSize: 11.5, color: C.faint, marginTop: 2, maxWidth: 360, lineHeight: 1.4 }}>{d.summary}</div> : null}</Td>
                   <Td style={{ color: C.mute, fontSize: 12 }}>{d.category}</Td>
                   <Td><Badge text={DEPTS[d.dept]?.short || d.dept} color={DEPTS[d.dept]?.accent || C.faint} /></Td>
                   <Td style={{ color: C.mute, fontSize: 12 }}>{uName(state, d.addedById)}</Td>
@@ -2217,6 +2219,283 @@ function Constitution({ state, setState, user }) {
   );
 }
 
+/* ================= IMPORT STUDIO (WhatsApp export → dashboard) ================= */
+const CAT_MAP = {
+  invoice: "Vendor Contracts", "rate-card": "Legal & Agreements", agreement: "Legal & Agreements",
+  "floor-plan": "Design & Drawings", "site-photo": "Design & Drawings", certificate: "Licences & Compliance",
+  "brand-creative": "Marketing & Brand", product: "Marketing & Brand", screenshot: "Other", other: "Other",
+};
+const DEPT_FOR_CAT = {
+  invoice: "admin", "rate-card": "leasing", agreement: "leasing", "floor-plan": "design", "site-photo": "project",
+  certificate: "admin", "brand-creative": "marketing", product: "marketing", screenshot: "exec", other: "exec",
+};
+const importInputSt = { background: C.panel3, border: `1px solid ${C.line}`, borderRadius: 8, padding: "9px 12px", color: C.text, fontFamily: SANS, fontSize: 13, width: "100%" };
+
+function ImportStudio({ state, setState, user, liveStatus }) {
+  const [phase, setPhase] = useState("idle"); // idle | scanned | running | review | done
+  const [fileName, setFileName] = useState("");
+  const [inv, setInv] = useState(null); // {chatText, media[], participants, first, last, messageCount}
+  const [opts, setOpts] = useState({ analyzeImages: true, analyzePdfs: true, analyzeVideos: true, analyzeChat: true, saveMedia: true });
+  const [logLines, setLogLines] = useState([]);
+  const [prog, setProg] = useState({ done: 0, total: 0 });
+  const [proposals, setProposals] = useState(null);
+  const [err, setErr] = useState("");
+  const zipCtx = React.useRef(null);
+  const key = (state.aiKey || "").trim();
+  const fb = loadFbConfig();
+  const log = (t) => setLogLines((L) => [...L, t]);
+
+  const reset = () => { setPhase("idle"); setFileName(""); setInv(null); setLogLines([]); setProg({ done: 0, total: 0 }); setProposals(null); setErr(""); if (zipCtx.current?.reader) { try { zipCtx.current.reader.close(); } catch (e) {} } zipCtx.current = null; };
+
+  async function onPick(e) {
+    const f = e.target.files && e.target.files[0]; e.target.value = "";
+    if (!f) return;
+    setErr(""); setFileName(f.name); setLogLines([]); setPhase("running"); log("Scanning " + f.name + " …");
+    try {
+      if (/\.txt$/i.test(f.name)) {
+        const chatText = await f.text();
+        const parsed = WA.parseChatText(chatText);
+        setInv({ chatText, media: [], ...parsed, messageCount: parsed.messages.length });
+      } else {
+        const ctx = await WA.openZip(f);
+        zipCtx.current = ctx;
+        if (!ctx.chatEntry) throw new Error("No _chat.txt found in this zip — is it a WhatsApp export?");
+        const chatText = await WA.readEntryText(ctx.chatEntry, ctx.zip);
+        const parsed = WA.parseChatText(chatText);
+        setInv({ chatText, media: ctx.media, ...parsed, messageCount: parsed.messages.length });
+        log(`Found ${parsed.messages.length} messages and ${ctx.media.length} attachments.`);
+      }
+      setPhase("scanned");
+    } catch (e2) { console.error(e2); setErr(e2.message || String(e2)); setPhase("idle"); }
+  }
+
+  const counts = React.useMemo(() => {
+    const c = { image: 0, video: 0, audio: 0, pdf: 0, vcf: 0, doc: 0, other: 0, bytes: 0 };
+    (inv?.media || []).forEach((m) => { c[m.kind] = (c[m.kind] || 0) + 1; c.bytes += m.size; });
+    return c;
+  }, [inv]);
+  const estCalls = (opts.analyzeChat ? Math.max(1, Math.ceil((inv?.messageCount || 0) / 400)) : 0)
+    + (opts.analyzeImages ? counts.image : 0) + (opts.analyzePdfs ? counts.pdf : 0) + (opts.analyzeVideos ? counts.video : 0);
+
+  // ---- the pipeline ----
+  async function run() {
+    if (!key) { setErr("Set the team AI key in Team & Access first — the importer needs it to read media and the chat."); return; }
+    setPhase("running"); setErr(""); setLogLines([]);
+    const P = { people: [], tasks: [], approvals: [], docs: [], decisions: [] };
+    const media = inv.media || [];
+    const toAnalyse = media.filter((m) => (m.kind === "image" && opts.analyzeImages) || (m.kind === "pdf" && opts.analyzePdfs) || (m.kind === "video" && opts.analyzeVideos));
+    const toCatalog = media.filter((m) => !toAnalyse.includes(m));
+    setProg({ done: 0, total: media.length + (opts.analyzeChat ? 1 : 0) });
+    let done = 0; const tick = () => { done += 1; setProg((p) => ({ ...p, done })); };
+    const zip = zipCtx.current?.zip;
+    const stamp = today();
+    const folder = "whatsapp/" + fileName.replace(/[^\w.-]+/g, "_") + "-" + Date.now();
+
+    // 1) chat text
+    if (opts.analyzeChat && inv.chatText) {
+      log("Reading the conversation…");
+      const roster = state.users.map((u) => `${u.id} — ${u.name} — ${u.dept}`).join("; ");
+      // chunk very long chats to ~24k chars per call
+      const text = inv.chatText; const CH = 24000;
+      for (let i = 0; i < text.length; i += CH) {
+        try {
+          const r = await WA.analyseChat({ key, transcript: text.slice(i, i + CH), roster, today: stamp });
+          (r.people || []).forEach((x) => P.people.push({ ...x, dept: "marketing", tier: "external", subRole: x.hint || "Imported from WhatsApp", include: true }));
+          (r.tasks || []).forEach((x) => P.tasks.push({ ...x, include: true }));
+          (r.approvals || []).forEach((x) => P.approvals.push({ ...x, include: true }));
+          (r.docs || []).forEach((x) => P.docs.push({ name: x.name, category: x.category || "Other", dept: "exec", url: "", summary: x.note || "", source: "chat", include: true }));
+          (r.decisions || []).forEach((t) => P.decisions.push({ text: t, include: true }));
+        } catch (e) { log("· chat chunk skipped (" + (e.message || e) + ")"); if ((e.message || "") === "NEED_KEY") { setErr("The AI key was rejected (401). Check it in Team & Access."); setPhase("scanned"); return; } }
+      }
+      tick();
+    }
+
+    // 2) media
+    for (const m of media) {
+      try {
+        const analyse = toAnalyse.includes(m);
+        let url = "";
+        let blob = null;
+        if (analyse || opts.saveMedia) blob = await WA.readEntryBlob(m._entry, zip, WA.mimeFor(m.name));
+        // save to Firebase Storage
+        if (opts.saveMedia && blob && fb && liveStatus === "on") {
+          try { url = await WA.uploadToStorage(fb, folder + "/" + m.name, new Blob([blob], { type: WA.mimeFor(m.name) })); }
+          catch (e) { log("· upload failed for " + m.name + " (" + (e.code || e.message) + ")"); }
+        }
+        if (analyse) {
+          let images = [], ctxText = "";
+          if (m.kind === "image") images = [await WA.downscaleImage(new Blob([blob], { type: WA.mimeFor(m.name) }))];
+          else if (m.kind === "video") { log("· sampling frames from " + m.name); images = await WA.sampleVideoFrames(new Blob([blob], { type: WA.mimeFor(m.name) }), 4); }
+          else if (m.kind === "pdf") { const pd = await WA.pdfExtract(new Blob([blob], { type: "application/pdf" }), 3); images = pd.images; ctxText = pd.text.slice(0, 1200); }
+          if (images.length) {
+            const r = await WA.analyseMedia({ key, kind: m.kind, images, filename: m.name, context: ctxText });
+            if (r && r.relevant) {
+              const cat = CAT_MAP[r.category] || "Other";
+              P.docs.push({ name: r.title || m.name, category: cat, dept: DEPT_FOR_CAT[r.category] || "exec", url, summary: [r.summary, (r.facts || []).join(" · ")].filter(Boolean).join(" — "), source: m.name, kind: m.kind, include: true });
+              if (r.suggestedTask) P.tasks.push({ title: r.suggestedTask, dept: DEPT_FOR_CAT[r.category] || "exec", assigneeName: "", due: "", notes: "From " + m.name, include: true });
+              log("✓ " + m.name + " — " + (r.title || cat));
+            } else { log("· " + m.name + " — not business-relevant, skipped"); }
+          }
+        } else if (opts.saveMedia) {
+          // catalog-only (audio, docs, other, or media with analysis off)
+          const kindName = { audio: "Voice note", video: "Video", image: "Image", doc: "Document", other: "File" }[m.kind] || "File";
+          P.docs.push({ name: m.name, category: "Other", dept: "exec", url, summary: kindName + " from WhatsApp export" + (url ? "" : " (not uploaded)"), source: m.name, kind: m.kind, include: !!url });
+        }
+        if (m.kind === "vcf") {
+          const vt = await WA.readEntryText(m._entry, zip);
+          WA.parseVcf(vt).forEach((c) => P.people.push({ name: c.name, dept: "marketing", tier: "external", subRole: [c.org, c.tel].filter(Boolean).join(" · ") || "Contact card", include: true }));
+        }
+      } catch (e) { log("· " + m.name + " skipped (" + (e.message || e) + ")"); }
+      tick();
+    }
+    if (zipCtx.current?.reader) { try { await zipCtx.current.reader.close(); } catch (e) {} }
+    // de-dup people by lowercased name
+    const seen = new Set(); P.people = P.people.filter((p) => { const k = (p.name || "").toLowerCase(); if (!p.name || seen.has(k)) return false; seen.add(k); return true; });
+    setProposals(P); setPhase("review");
+    log(`Done — ${P.people.length} people, ${P.tasks.length} tasks, ${P.approvals.length} approvals, ${P.docs.length} documents proposed.`);
+  }
+
+  const toggle = (grp, i) => setProposals((P) => ({ ...P, [grp]: P[grp].map((x, j) => j === i ? { ...x, include: !x.include } : x) }));
+
+  function applyMerge() {
+    const P = proposals;
+    setState((s) => {
+      let st = { ...s };
+      const exN = new Set(st.users.map((u) => u.name.toLowerCase()));
+      const exU = new Set(st.users.map((u) => (u.username || "").toLowerCase()));
+      const newUsers = P.people.filter((p) => p.include && p.name && !exN.has(p.name.toLowerCase())).map((p) => {
+        let un = slugUser(p.name); while (exU.has(un)) un += Math.floor(Math.random() * 9); exU.add(un); exN.add(p.name.toLowerCase());
+        return { id: uid(), name: p.name, dept: p.dept || "marketing", subRole: p.subRole || "Imported from WhatsApp", tier: p.tier || "external", username: un, password: String(1000 + Math.floor(Math.random() * 9000)) };
+      });
+      st.users = [...st.users, ...newUsers];
+      const nameId = {}; st.users.forEach((u) => { nameId[u.name.toLowerCase()] = u.id; nameId[(u.name.split(" ")[0] || "").toLowerCase()] = u.id; });
+      const newTasks = P.tasks.filter((t) => t.include && t.title).map((t) => ({ id: uid(), title: t.title, dept: t.dept || "exec", assigneeId: nameId[(t.assigneeName || "").toLowerCase()] || user.id, createdById: user.id, due: t.due || "", priority: "Medium", status: "Open", notes: t.notes || "(imported from WhatsApp)" }));
+      st.tasks = [...st.tasks, ...newTasks];
+      const newAppr = P.approvals.filter((a) => a.include && a.title).map((a) => ({ id: uid(), title: a.title, type: "Other", amountL: +a.amountL || 0, dept: "exec", raisedById: user.id, status: "Pending", decidedById: null, dateRaised: today(), dateDecided: "", notes: a.notes || "(imported from WhatsApp)" }));
+      st.approvals = [...st.approvals, ...newAppr];
+      const newDocs = P.docs.filter((d) => d.include && d.name).map((d) => ({ id: uid(), name: d.name, dept: d.dept || "exec", category: d.category || "Other", url: d.url || "", addedById: user.id, date: today(), summary: d.summary || "", source: d.source || "" }));
+      st.docs = [...st.docs, ...newDocs];
+      const dec = P.decisions.filter((x) => x.include).map((x) => x.text);
+      const newMeet = dec.length ? [{ id: uid(), title: "Imported notes — " + fileName, date: today(), dept: "exec", attendees: (inv.participants || []).join(", "), mom: dec.join("\n"), actions: "" }] : [];
+      st.meetings = [...st.meetings, ...newMeet];
+      return withLog(st, user.name, `imported WhatsApp export "${fileName}" — +${newUsers.length} people, +${newTasks.length} tasks, +${newAppr.length} approvals, +${newDocs.length} documents`);
+    });
+    setPhase("done");
+  }
+
+  const Opt = ({ k, label, sub }) => (
+    <label style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 0", cursor: "pointer" }}>
+      <input type="checkbox" checked={opts[k]} onChange={(e) => setOpts((o) => ({ ...o, [k]: e.target.checked }))} style={{ marginTop: 3 }} />
+      <span><span style={{ color: C.text, fontSize: 13 }}>{label}</span><br /><span style={{ color: C.faint, fontSize: 11.5 }}>{sub}</span></span>
+    </label>
+  );
+  const grpCount = (g) => (proposals?.[g] || []).filter((x) => x.include).length;
+
+  return (
+    <div>
+      <SectionTitle eyebrow="Records · Owner" title="Import Studio — WhatsApp" sub="Turn a WhatsApp chat export into dashboard data. It reads the conversation and every attachment in your browser, uses AI to keep only what matters, and lets you review everything before it's merged. Nothing is overwritten." />
+
+      {err && <Card style={{ marginBottom: 12, borderColor: `${C.red}66` }}><div style={{ color: C.red, fontSize: 13 }}><AlertTriangle size={14} style={{ verticalAlign: -2, marginRight: 6 }} />{err}</div></Card>}
+
+      {phase === "idle" && (
+        <Card style={{ maxWidth: 720 }}>
+          <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.7, marginBottom: 14 }}>
+            Export a chat from WhatsApp (<b>Attach Media</b> to bring in photos, PDFs and videos, or <b>Without Media</b> for just the text), then pick the <b>.zip</b> (or <b>.txt</b>) here. Large exports are read a piece at a time, so a 1&nbsp;GB+ file won't crash the tab.
+          </div>
+          <label style={{ display: "inline-flex" }}>
+            <input type="file" accept=".zip,.txt,application/zip,text/plain" style={{ display: "none" }} onChange={onPick} />
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer", background: C.gold, color: "#1a1206", border: "none", borderRadius: 9, padding: "11px 20px", fontSize: 14, fontWeight: 700, fontFamily: SANS }}><Upload size={16} /> Choose WhatsApp export</span>
+          </label>
+          <div style={{ fontSize: 11.5, color: C.faint, marginTop: 14, lineHeight: 1.6 }}>
+            {key ? <><CheckCircle2 size={12} color={C.green} style={{ verticalAlign: -1, marginRight: 4 }} /> AI key detected.</> : <><AlertTriangle size={12} color={C.amber} style={{ verticalAlign: -1, marginRight: 4 }} /> No AI key set — media/chat analysis needs it (Team & Access → AI key).</>}
+            {" · "}
+            {liveStatus === "on" && fb ? <><CheckCircle2 size={12} color={C.green} style={{ verticalAlign: -1, marginRight: 4 }} /> Live workspace on — media can be saved to your Firebase Storage.</> : <><AlertTriangle size={12} color={C.amber} style={{ verticalAlign: -1, marginRight: 4 }} /> Live workspace off — media can be analysed but not saved (connect it in Team & Access to store files).</>}
+          </div>
+        </Card>
+      )}
+
+      {phase === "scanned" && inv && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 12, maxWidth: 900 }}>
+          <Card title={`Found in ${fileName}`}>
+            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.9 }}>
+              <div><b>{inv.messageCount.toLocaleString()}</b> messages{inv.first ? <> · {inv.first} → {inv.last}</> : null}</div>
+              <div><b>{(inv.participants || []).length}</b> participants: <span style={{ color: C.mute, fontSize: 12 }}>{(inv.participants || []).slice(0, 8).join(", ")}{inv.participants.length > 8 ? "…" : ""}</span></div>
+              <div style={{ marginTop: 8, borderTop: `1px solid ${C.lineSoft}`, paddingTop: 8 }}>
+                {["image", "video", "pdf", "audio", "vcf", "doc", "other"].map((k) => counts[k] ? <Badge key={k} text={`${counts[k]} ${k}${counts[k] > 1 ? "s" : ""}`} color={C.blue} /> : null)}
+                {inv.media.length ? <div style={{ fontSize: 11.5, color: C.faint, marginTop: 8 }}>Total media ≈ {WA.humanSize(counts.bytes)}</div> : <div style={{ fontSize: 12, color: C.faint, marginTop: 4 }}>No media (text-only export).</div>}
+              </div>
+            </div>
+          </Card>
+          <Card title="What to do">
+            <Opt k="analyzeChat" label="Read the conversation" sub="Pull out people, tasks, approvals and decisions from the text." />
+            <Opt k="analyzeImages" label={`Analyse images (${counts.image})`} sub="AI keeps invoices, plans, rate cards, docs; drops memes/selfies." />
+            <Opt k="analyzePdfs" label={`Analyse PDFs (${counts.pdf})`} sub="Extract text and read the pages." />
+            <Opt k="analyzeVideos" label={`Analyse videos (${counts.video})`} sub="Samples a few frames per video and describes them." />
+            <Opt k="saveMedia" label="Save media to workspace" sub={liveStatus === "on" && fb ? "Uploads the files to your Firebase Storage and links them." : "Needs the live workspace connected (Team & Access)."} />
+            <div style={{ marginTop: 12, borderTop: `1px solid ${C.lineSoft}`, paddingTop: 12 }}>
+              <div style={{ fontSize: 12.5, color: C.text }}>Estimated AI calls: <b style={{ color: C.gold }}>{estCalls.toLocaleString()}</b></div>
+              <div style={{ fontSize: 11, color: C.faint, marginTop: 3 }}>Runs one at a time; you can leave this tab open. You review everything before anything is added.</div>
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <Btn onClick={run}><Sparkles size={14} /> Process</Btn>
+                <Btn ghost onClick={reset}>Cancel</Btn>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {phase === "running" && (
+        <Card style={{ maxWidth: 760 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+            <Loader2 size={18} color={C.gold} className="spin" />
+            <div style={{ fontSize: 14, color: C.text }}>Processing{prog.total ? ` — ${prog.done}/${prog.total}` : ""}…</div>
+          </div>
+          {prog.total > 0 && <div style={{ height: 6, background: C.panel3, borderRadius: 4, overflow: "hidden", marginBottom: 12 }}><div style={{ height: "100%", width: `${(prog.done / prog.total) * 100}%`, background: C.gold }} /></div>}
+          <div style={{ maxHeight: 300, overflow: "auto", fontSize: 12, color: C.mute, fontFamily: "monospace", lineHeight: 1.7, background: C.panel3, borderRadius: 8, padding: 12 }}>
+            {logLines.slice(-200).map((l, i) => <div key={i}>{l}</div>)}
+          </div>
+        </Card>
+      )}
+
+      {phase === "review" && proposals && (
+        <div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 13, color: C.mute }}>Review and untick anything you don't want, then merge. Existing data is never touched.</div>
+            <div style={{ flex: 1 }} />
+            <Btn onClick={applyMerge}><FileCheck2 size={14} /> Merge {grpCount("people") + grpCount("tasks") + grpCount("approvals") + grpCount("docs")} items</Btn>
+            <Btn ghost onClick={reset}>Discard</Btn>
+          </div>
+          {[["docs", "Documents & media", (d) => <><b style={{ color: C.text }}>{d.name}</b> <Badge text={d.category} color={C.blue} />{d.url ? <a href={d.url} target="_blank" rel="noreferrer" style={{ color: C.blue, fontSize: 11, marginLeft: 6 }}>file</a> : null}<div style={{ fontSize: 11.5, color: C.faint }}>{d.summary}{d.source ? " · " + d.source : ""}</div></>],
+            ["tasks", "Tasks", (t) => <><b style={{ color: C.text }}>{t.title}</b> <Badge text={t.dept} color={C.purple} />{t.assigneeName ? <span style={{ fontSize: 11.5, color: C.faint }}> → {t.assigneeName}</span> : null}{t.due ? <span style={{ fontSize: 11.5, color: C.faint }}> · due {t.due}</span> : null}</>],
+            ["approvals", "Approvals", (a) => <><b style={{ color: C.text }}>{a.title}</b>{a.amountL ? <Badge text={fmtL(a.amountL)} color={C.gold} /> : null}<div style={{ fontSize: 11.5, color: C.faint }}>{a.notes}</div></>],
+            ["people", "People", (p) => <><b style={{ color: C.text }}>{p.name}</b> <Badge text={p.tier} color={C.teal} /><div style={{ fontSize: 11.5, color: C.faint }}>{p.subRole}</div></>],
+            ["decisions", "Decisions / notes", (d) => <span style={{ color: C.text, fontSize: 13 }}>{d.text}</span>],
+          ].map(([grp, title, render]) => (proposals[grp] || []).length ? (
+            <Card key={grp} title={`${title} · ${grpCount(grp)}/${proposals[grp].length}`} style={{ marginBottom: 12 }}>
+              <div style={{ display: "grid", gap: 6 }}>
+                {proposals[grp].map((x, i) => (
+                  <label key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "6px 0", borderBottom: `1px solid ${C.lineSoft}`, cursor: "pointer", opacity: x.include ? 1 : 0.45 }}>
+                    <input type="checkbox" checked={x.include} onChange={() => toggle(grp, i)} style={{ marginTop: 3 }} />
+                    <div style={{ flex: 1, minWidth: 0, fontSize: 13 }}>{render(x)}</div>
+                  </label>
+                ))}
+              </div>
+            </Card>
+          ) : null)}
+        </div>
+      )}
+
+      {phase === "done" && (
+        <Card style={{ maxWidth: 620 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}><CheckCircle2 size={22} color={C.green} /><div style={{ fontSize: 15, color: C.text }}>Merged into the dashboard.</div></div>
+          <div style={{ fontSize: 12.5, color: C.mute, marginTop: 8, lineHeight: 1.6 }}>Find the new records under Documents, Tasks, Approvals, Team and Meetings. Run another export whenever you like — it's always additive.</div>
+          <div style={{ marginTop: 14 }}><Btn onClick={reset}><Upload size={14} /> Import another</Btn></div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 /* ================= TEAM & ACCESS ================= */
 function Team({ state, setState, user, liveStatus }) {
   const [edit, setEdit] = useState(null);
@@ -2551,6 +2830,7 @@ export default function App() {
     documents: <Documents state={state} setState={writeState} user={user} />,
     meetings: <MeetingStudio state={state} setState={writeState} user={user} />,
     constitution: <Constitution state={state} setState={writeState} user={user} />,
+    import: <ImportStudio state={state} setState={writeState} user={user} liveStatus={liveStatus} />,
     team: <Team state={state} setState={writeState} user={user} liveStatus={liveStatus} />,
   }[page] || <Overview state={state} setState={writeState} user={user} goTo={setPage} />;
 
