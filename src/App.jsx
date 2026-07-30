@@ -1008,9 +1008,22 @@ function Capex({ state, setState, canWrite }) {
 /* ================= LAYOUT (The Stack) ================= */
 const blankZone = () => ({ id: "", floor: "Ground", name: "", areaSft: 0, tenantId: null, use: "Vanilla Retail" });
 
+const PLAN_ASSET = (f) => `${import.meta.env.BASE_URL}plans/${f}`;
+const PLAN_SHEETS = [
+  { plot: "Plot 1 — Wings A · B · C", floor: "Ground Floor",        img: "plot1-ground" },
+  { plot: "Plot 1 — Wings A · B · C", floor: "First Floor",         img: "plot1-first" },
+  { plot: "Plot 1 — Wings A · B · C", floor: "Second Floor",        img: "plot1-second" },
+  { plot: "Plot 1 — Wings A · B · C", floor: "Third Floor",         img: "plot1-third" },
+  { plot: "Plot 2 — Wings D · E · F", floor: "Ground Floor",        img: "plot2-ground" },
+  { plot: "Plot 2 — Wings D · E · F", floor: "First Floor",         img: "plot2-first" },
+  { plot: "Plot 2 — Wings D · E · F", floor: "Second Floor",        img: "plot2-second" },
+  { plot: "Plot 2 — Wings D · E · F", floor: "Third Floor + Terrace", img: "plot2-third-terrace" },
+];
+
 function MallLayout({ state, setState, canWrite }) {
   const [edit, setEdit] = useState(null);
   const [selZone, setSelZone] = useState(null);
+  const [lightbox, setLightbox] = useState(null);
   const t = state.tenants;
   const zoneColor = (z) => {
     const tn = t.find((x) => x.id === z.tenantId);
@@ -1029,6 +1042,30 @@ function MallLayout({ state, setState, canWrite }) {
   return (
     <div>
       <SectionTitle eyebrow="Property" title="Mall Layout — The Stack" sub="Floor-by-floor stacking plan. Each block is a zone, sized by area and coloured by the assigned tenant's leasing status. Tap a block for details." />
+
+      <Card title="Architectural floor plans — Disha Vision (working drawings)" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.65, marginBottom: 12 }}>
+          Two plots × three wings each — <b style={{ color: C.text }}>Plot 1 (Wings A·B·C)</b> and <b style={{ color: C.text }}>Plot 2 (Wings D·E·F)</b> — over Ground, First, Second, Third + Terrace. Plate area: Ground & First ≈ 21,918 sq ft/wing; Second & Third ≈ 26,310 sq ft/wing. Structural: PCPL Nagpur · MEP / Fire / Plumbing: Jhaveri Associates. Tap any sheet to view full size.
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+          <a href={PLAN_ASSET("KKBP-floor-plans.pdf")} target="_blank" rel="noreferrer" download style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `${C.gold}18`, color: C.gold, border: `1px solid ${C.gold}55`, borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, textDecoration: "none" }}><FileText size={14} /> Full plan set (PDF)</a>
+          <a href={PLAN_ASSET("KKBP-all-floors.dwg")} target="_blank" rel="noreferrer" download style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "transparent", color: C.blue, border: `1px solid ${C.blue}55`, borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, textDecoration: "none" }}><Download size={14} /> CAD source (DWG)</a>
+        </div>
+        {["Plot 1 — Wings A · B · C", "Plot 2 — Wings D · E · F"].map((plot) => (
+          <div key={plot} style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: C.mute, marginBottom: 8 }}>{plot}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 10 }}>
+              {PLAN_SHEETS.filter((s) => s.plot === plot).map((s) => (
+                <div key={s.img} onClick={() => setLightbox(s)} style={{ cursor: "pointer", border: `1px solid ${C.line}`, borderRadius: 8, overflow: "hidden", background: "#fff" }}>
+                  <img src={PLAN_ASSET(s.img + ".thumb.png")} alt={`${s.plot} — ${s.floor}`} loading="lazy" style={{ width: "100%", display: "block", aspectRatio: "1.414", objectFit: "cover", objectPosition: "top" }} />
+                  <div style={{ padding: "7px 10px", fontSize: 12, color: C.text, background: C.panel2, borderTop: `1px solid ${C.line}` }}>{s.floor}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </Card>
+
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
         {TSTATUS.map((st) => <Badge key={st} text={st} color={TSTATUS_COLOR[st]} />)}
         <Badge text="Unassigned" color={C.faint} />
@@ -1110,6 +1147,22 @@ function MallLayout({ state, setState, canWrite }) {
             <Btn onClick={save} disabled={!edit.name}>Save zone</Btn>
           </div>
         </Modal>
+      )}
+
+      {lightbox && (
+        <div onClick={() => setLightbox(null)} style={{ position: "fixed", inset: 0, background: "#000D", zIndex: 60, display: "flex", flexDirection: "column", padding: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, color: "#fff", marginBottom: 10, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: SERIF, fontSize: 16 }}>{lightbox.floor}</div>
+              <div style={{ fontSize: 12, color: "#bbb" }}>{lightbox.plot}</div>
+            </div>
+            <a href={PLAN_ASSET(lightbox.img + ".png")} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#fff", border: "1px solid #fff5", borderRadius: 8, padding: "6px 12px", fontSize: 13, textDecoration: "none" }}><Search size={14} /> Open full resolution</a>
+            <X size={26} style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => setLightbox(null)} />
+          </div>
+          <div style={{ flex: 1, minHeight: 0, overflow: "auto", background: "#fff", borderRadius: 8 }} onClick={(e) => e.stopPropagation()}>
+            <img src={PLAN_ASSET(lightbox.img + ".png")} alt={lightbox.floor} style={{ width: "100%", display: "block" }} />
+          </div>
+        </div>
       )}
     </div>
   );
