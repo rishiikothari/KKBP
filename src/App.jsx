@@ -233,6 +233,10 @@ async function pushLive(state) {
 
 const loadApiKey = () => { if (IS_CLOUD) return ""; try { return localStorage.getItem("kkbp-anthropic-key") || ""; } catch (e) { return ""; } };
 const storeApiKey = (k) => { if (!IS_CLOUD) { try { localStorage.setItem("kkbp-anthropic-key", k); } catch (e) {} } };
+/* Bump this whenever the app should force every device to discard whatever it
+   has saved locally / in the shared workspace and boot the clean slate below.
+   On load, any state stamped with an older epoch is thrown away and replaced. */
+const DATA_EPOCH = "2026-07-30-clean";
 const freshState = () => ({
   users: SEED_USERS, tenants: SEED_TENANTS, capex: SEED_CAPEX,
   campaigns: SEED_CAMPAIGNS, content: SEED_CONTENT,
@@ -242,8 +246,15 @@ const freshState = () => ({
   meetings: SEED_MEETINGS, docs: SEED_DOCS,
   aiKey: "",
   log: [{ ts: Date.now(), by: "System", text: "TTJ Team OS initialised — clean workspace, official channel live." }],
-  acks: {}, constitutionVersion: 2,
+  acks: {}, constitutionVersion: 2, dataEpoch: DATA_EPOCH,
 });
+/* Fresh workspace, but carry forward the shared AI key (a credential, not sample
+   data) so a reset doesn't knock the AI Notetaker offline for everyone. */
+const resetToCleanSlate = (prev) => {
+  const f = freshState();
+  if (prev && prev.aiKey) f.aiKey = prev.aiKey;
+  return f;
+};
 
 /* ================= CALCS & HELPERS ================= */
 function tenantMonthlyL(t) {
@@ -2407,11 +2418,16 @@ export default function App() {
     };
     (async () => {
       const loaded = await loadState();
-      const base = migrateState(loaded ? { ...freshState(), ...loaded } : freshState());
+      const stale = loaded && loaded.dataEpoch !== DATA_EPOCH; /* data saved before the current reset */
+      const base = migrateState(
+        loaded && !stale ? { ...freshState(), ...loaded }
+        : stale ? resetToCleanSlate(loaded)
+        : freshState()
+      );
       const cfg = loadFbConfig();
       if (!cfg) {
         finishBoot(base, false);
-        if (!loaded) await saveState(base);
+        if (!loaded || stale) await saveState(base); /* overwrite any stale local copy */
         return;
       }
       /* Live mode: wait for the first shared snapshot so a joining device
@@ -2426,13 +2442,22 @@ export default function App() {
             clearTimeout(fallback);
             setLiveStatus("on");
             if (msg.exists) {
-              try { finishBoot(migrateState({ ...freshState(), ...JSON.parse(msg.data) }), true); return; } catch (e) {}
+              try {
+                const cloud = JSON.parse(msg.data);
+                if (cloud.dataEpoch === DATA_EPOCH) { finishBoot(migrateState({ ...freshState(), ...cloud }), true); return; }
+                /* shared workspace holds pre-reset data — replace it with the clean slate and push up */
+                finishBoot(migrateState(resetToCleanSlate(cloud)), false); return;
+              } catch (e) {}
             }
             finishBoot(base, false); /* first device ever seeds the shared workspace */
             return;
           }
           if (msg.by === CLIENT_ID || !msg.exists) return;
-          try { finishBoot(migrateState({ ...freshState(), ...JSON.parse(msg.data) }), true); } catch (e) {}
+          try {
+            const cloud = JSON.parse(msg.data);
+            if (cloud.dataEpoch !== DATA_EPOCH) return; /* ignore stale snapshots until a device resets them */
+            finishBoot(migrateState({ ...freshState(), ...cloud }), true);
+          } catch (e) {}
         });
       } catch (e) {
         console.error("live connect failed", e);
