@@ -6,7 +6,7 @@ import {
   Landmark, KeyRound, ChevronRight, FileText, CalendarDays, Wrench, Search,
   ListChecks, Stamp, Bell, FolderOpen, NotebookPen, Send, ThumbsUp, ThumbsDown,
   Pin, Link as LinkIcon, Activity, Mic, Square, Sparkles, Loader2, FileAudio, MessageSquareText, Pause, Play,
-  Menu,
+  Menu, Eye,
 } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
@@ -45,6 +45,10 @@ const isOwner = (u) => u.exec === "owner";
 const isCEO = (u) => u.exec === "ceo";
 const isHead = (u) => u.tier === "head";
 const isExternal = (u) => u.tier === "external";
+/* Single source of truth for write access. The Owner (Rishi) is the only person
+   who can create/edit/delete anything; everyone else has a fully read-only
+   dashboard. Loosen this one predicate to hand editing back to more roles. */
+const canModify = (u) => !!u && isOwner(u);
 
 const PAGES = [
   { key: "overview",     label: "Overview",           icon: LayoutDashboard, group: "Daily" },
@@ -60,20 +64,18 @@ const PAGES = [
   { key: "documents",    label: "Documents",          icon: FolderOpen,      group: "Records" },
   { key: "meetings",     label: "Meetings & AI Notes", icon: NotebookPen,     group: "Records" },
   { key: "constitution", label: "Constitution",       icon: ScrollText,      group: "Records" },
-  { key: "team",         label: "Team & Access",      icon: Users,           group: "Records", depts: ["exec"] },
+  { key: "team",         label: "Team & Access",      icon: Users,           group: "Records", owner: true },
 ];
-const pageAllowed = (p, u) => !p.depts || p.depts.includes(u.dept);
+/* `owner: true` pages (settings — team, API key, live workspace, import/export)
+   are visible only to the Owner. Other pages follow the department gate. */
+const pageAllowed = (p, u) => (!p.owner || isOwner(u)) && (!p.depts || p.depts.includes(u.dept));
 
 /* Registers each dept can WRITE. Externals never write registers (they act on tasks/content assigned to them). */
 const WRITE_DEPT = {
   tenants: ["leasing"], capex: ["project"], marketing: ["marketing"],
   adminops: ["admin"], drawings: ["project", "design"], layout: ["leasing", "project"],
 };
-const canWritePage = (key, u) => {
-  if (isExec(u)) return true;
-  if (isExternal(u)) return false;
-  return (WRITE_DEPT[key] || []).includes(u.dept);
-};
+const canWritePage = (key, u) => canModify(u);
 
 /* ================= SEED DATA (KKBP CMA / Cockpit) ================= */
 const CMA_TARGET_L = 541;
@@ -530,14 +532,14 @@ const KCOLOR = { Open: C.faint, "In Progress": C.amber, Review: C.blue, Done: C.
 function Tasks({ state, setState, user }) {
   const [edit, setEdit] = useState(null);
   const [view, setView] = useState(isExternal(user) ? "mine" : "dept");
-  const canCreate = !isExternal(user) || true; /* externals may raise tasks for themselves */
+  const canCreate = canModify(user);
   const visible = state.tasks.filter((k) => {
     if (view === "mine") return k.assigneeId === user.id;
     if (view === "dept") return isExec(user) ? true : k.dept === user.dept;
     return isExec(user) || isHead(user);
   }).filter((k) => (isExternal(user) ? k.assigneeId === user.id || k.createdById === user.id : true));
-  const canEditTask = (k) => isExec(user) || (isHead(user) && k.dept === user.dept) || k.createdById === user.id;
-  const canMove = (k) => canEditTask(k) || k.assigneeId === user.id;
+  const canEditTask = (k) => canModify(user);
+  const canMove = (k) => canModify(user);
   const save = () => {
     const isNew = !edit.id;
     const rec = { ...edit, id: edit.id || uid() };
@@ -642,14 +644,7 @@ const requiredApprover = (p) => {
 };
 function Approvals({ state, setState, user }) {
   const [edit, setEdit] = useState(null);
-  const canDecide = (p) => {
-    if (p.status !== "Pending") return false;
-    if (isOwner(user)) return true;
-    if (p.type === "Lease deviation") return false; /* owner only (records CEO concurrence in notes) */
-    const a = +p.amountL || 0;
-    if (isCEO(user)) return a <= 25;
-    return isHead(user) && user.dept === p.dept && a <= 5;
-  };
+  const canDecide = (p) => p.status === "Pending" && canModify(user);
   const decide = (p, status) => setState((s) => withLog(
     { ...s, approvals: s.approvals.map((x) => (x.id === p.id ? { ...x, status, decidedById: user.id, dateDecided: today() } : x)) },
     user.name, `${status.toLowerCase()} “${p.title}”${p.amountL ? ` (${fmtL(p.amountL)})` : ""}`));
@@ -662,9 +657,9 @@ function Approvals({ state, setState, user }) {
   return (
     <div>
       <SectionTitle eyebrow="Daily" title="Approvals" sub="Money and deviations move only through this page, routed per the Delegation of Authority (§4). A verbal yes is not an approval." />
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+      {canModify(user) && <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
         <Btn onClick={() => setEdit({ title: "", type: APPROVAL_TYPES[0], amountL: 0, dept: isExec(user) ? "project" : user.dept, notes: "" })}><Send size={14} /> Raise request</Btn>
-      </div>
+      </div>}
       {groups.map(([label, list]) => (
         <div key={label} style={{ marginBottom: 18 }}>
           <div style={{ fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", color: C.mute, marginBottom: 8 }}>{label} · {list.length}</div>
@@ -731,7 +726,7 @@ function Approvals({ state, setState, user }) {
 /* ================= ANNOUNCEMENTS ================= */
 function Announcements({ state, setState, user }) {
   const [edit, setEdit] = useState(null);
-  const canPost = isExec(user) || isHead(user);
+  const canPost = canModify(user);
   const save = () => {
     const rec = { ...edit, id: edit.id || uid(), byId: edit.byId || user.id, date: edit.date || today() };
     setState((s) => withLog(
@@ -757,7 +752,7 @@ function Announcements({ state, setState, user }) {
                 <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.65, marginTop: 6 }}>{a.body}</div>
                 <div style={{ fontSize: 11, color: C.faint, marginTop: 8 }}>{uName(state, a.byId)} · {a.date}</div>
               </div>
-              {(isExec(user) || a.byId === user.id) && <div style={{ display: "flex", gap: 10, flexShrink: 0 }}>
+              {canModify(user) && <div style={{ display: "flex", gap: 10, flexShrink: 0 }}>
                 <Pencil size={14} color={C.mute} style={{ cursor: "pointer" }} onClick={() => setEdit({ ...a })} />
                 <Trash2 size={14} color={C.red} style={{ cursor: "pointer" }} onClick={() => del(a.id)} />
               </div>}
@@ -1356,10 +1351,10 @@ const blankContent = (u, users) => ({ id: "", title: "", type: CONTENT_TYPES[0],
 
 function MarketingStudio({ state, setState, user }) {
   const ext = isExternal(user);
-  const head = isExec(user) || (user.dept === "marketing" && isHead(user));
+  const head = canModify(user);
   const internalMkt = user.dept === "marketing" && !ext;
-  const canManageCampaigns = isExec(user) || (internalMkt && isHead(user));
-  const canBrief = isExec(user) || internalMkt; /* head + content team + intern create briefs */
+  const canManageCampaigns = canModify(user);
+  const canBrief = canModify(user);
   const [tab, setTab] = useState(ext ? "content" : "campaigns");
   const [editC, setEditC] = useState(null);
   const [editK, setEditK] = useState(null);
@@ -1384,12 +1379,7 @@ function MarketingStudio({ state, setState, user }) {
     user.name, `moved content “${c.title}” to ${status}`));
   const visibleContent = ext ? state.content.filter((c) => c.assigneeId === user.id) : state.content;
   const mktUsers = state.users.filter((u2) => u2.dept === "marketing");
-  const nextStates = (c) => {
-    if (ext && c.assigneeId === user.id) return ["In Production","Internal Review"].filter((x) => x !== c.status);
-    if (head) return CONTENT_STATUS.filter((x) => x !== c.status);
-    if (internalMkt) return CONTENT_STATUS.filter((x) => !["Approved","Published"].includes(x) && x !== c.status);
-    return [];
-  };
+  const nextStates = (c) => canModify(user) ? CONTENT_STATUS.filter((x) => x !== c.status) : [];
   const sorted = [...state.campaigns].sort((a, b) => (a.start || "").localeCompare(b.start || ""));
 
   const tabs = [...(!ext ? [["campaigns","Campaigns"]] : []), ["content","Content Studio"], ["partners","Team & Partners"]];
@@ -1463,7 +1453,7 @@ function MarketingStudio({ state, setState, user }) {
                     <div key={c.id} style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 9, padding: 12 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                         <div style={{ fontSize: 13, color: C.text, lineHeight: 1.45 }}>{c.title}</div>
-                        {(head || (internalMkt && !["Approved","Published"].includes(c.status))) && <Pencil size={12} color={C.mute} style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => setEditK({ ...c })} />}
+                        {canModify(user) && <Pencil size={12} color={C.mute} style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => setEditK({ ...c })} />}
                       </div>
                       <div style={{ fontSize: 11, color: C.faint, marginTop: 6 }}>{c.type} · {uName(state, c.assigneeId)}{c.due && <span style={isOverdue(c.due, ["Approved","Published"].includes(c.status)) ? { color: C.red, fontWeight: 700 } : undefined}> · due {c.due}{isOverdue(c.due, ["Approved","Published"].includes(c.status)) ? " · OVERDUE" : ""}</span>}</div>
                       {c.campaign && <div style={{ fontSize: 10.5, color: C.rose, marginTop: 3 }}>{c.campaign}</div>}
@@ -1579,7 +1569,7 @@ function Documents({ state, setState, user }) {
     setEdit(null);
   };
   const del = (id) => { if (confirm("Remove this document entry?")) setState((s) => ({ ...s, docs: s.docs.filter((d) => d.id !== id) })); };
-  const canAdd = !ext || true; /* externals may file deliverables in their dept */
+  const canAdd = canModify(user);
   return (
     <div>
       <SectionTitle eyebrow="Records" title="Documents" sub="The index of record — agreements, bank files, drawings, brand assets, licences. Paste the Drive/storage link; the index lives here." />
@@ -1602,7 +1592,7 @@ function Documents({ state, setState, user }) {
                   <Td style={{ color: C.mute, fontSize: 12 }}>{d.date}</Td>
                   <Td>{d.url ? <a href={d.url} target="_blank" rel="noreferrer" style={{ color: C.blue, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}><LinkIcon size={11} /> Open</a> : <span style={{ color: C.faint, fontSize: 12 }}>No link</span>}</Td>
                   <Td right>
-                    {(isExec(user) || d.addedById === user.id) && <>
+                    {canModify(user) && <>
                       <Pencil size={14} color={C.mute} style={{ cursor: "pointer", marginRight: 12 }} onClick={() => setEdit({ ...d })} />
                       <Trash2 size={14} color={C.red} style={{ cursor: "pointer" }} onClick={() => del(d.id)} />
                     </>}
@@ -1855,10 +1845,10 @@ function MeetingStudio({ state, setState, user }) {
   if (view === "list") return (
     <div>
       <SectionTitle eyebrow="Records" title="Meetings & AI Notes" sub="Record a meeting, get a live transcript, and let the AI notetaker push timestamped decisions and action items straight to each person's dashboard. Quick MOMs still work for informal huddles." />
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-        {!isExternal(user) && <Btn ghost onClick={() => setEditMom({ title: "", date: today(), dept: isExec(user) ? "exec" : user.dept, attendees: "", mom: "", actions: "" })}><NotebookPen size={14} /> Quick MOM</Btn>}
+      {canModify(user) && <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        <Btn ghost onClick={() => setEditMom({ title: "", date: today(), dept: isExec(user) ? "exec" : user.dept, attendees: "", mom: "", actions: "" })}><NotebookPen size={14} /> Quick MOM</Btn>
         <Btn onClick={() => { resetRecorder(); setView("record"); }}><Mic size={14} /> Record meeting</Btn>
-      </div>
+      </div>}
       <div style={{ display: "grid", gap: 10, maxWidth: 880 }}>
         {list.map((m) => m.kind === "ai" ? (
           <Card key={m.id} pad={16}>
@@ -1875,7 +1865,7 @@ function MeetingStudio({ state, setState, user }) {
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <Btn small ghost onClick={() => { setDetailId(m.id); setView("detail"); }}>Open</Btn>
-                {(isExec(user) || m.recordedById === user.id) && <Trash2 size={14} color={C.red} style={{ cursor: "pointer" }} onClick={() => delMeeting(m.id)} />}
+                {canModify(user) && <Trash2 size={14} color={C.red} style={{ cursor: "pointer" }} onClick={() => delMeeting(m.id)} />}
               </div>
             </div>
           </Card>
@@ -1886,7 +1876,7 @@ function MeetingStudio({ state, setState, user }) {
                 <div style={{ fontFamily: SERIF, fontSize: 16, color: C.text }}>{m.title}</div>
                 <div style={{ fontSize: 11.5, color: C.faint, marginTop: 3 }}>{m.date} · <Badge text={DEPTS[m.dept]?.label || m.dept} color={DEPTS[m.dept]?.accent || C.faint} /> · {m.attendees}</div>
               </div>
-              {(isExec(user) || (!isExternal(user) && m.dept === user.dept)) && <div style={{ display: "flex", gap: 10 }}>
+              {canModify(user) && <div style={{ display: "flex", gap: 10 }}>
                 <Pencil size={14} color={C.mute} style={{ cursor: "pointer" }} onClick={() => setEditMom({ ...m })} />
                 <Trash2 size={14} color={C.red} style={{ cursor: "pointer" }} onClick={() => delMeeting(m.id)} />
               </div>}
@@ -2157,7 +2147,7 @@ function Constitution({ state, setState, user }) {
             {acked
               ? <><CheckCircle2 size={20} color={C.green} /><div style={{ fontSize: 13, color: C.text }}>You have acknowledged version {state.constitutionVersion} of this constitution.</div></>
               : <><Circle size={20} color={C.amber} /><div style={{ fontSize: 13, color: C.text }}>You have not yet acknowledged the current version.</div>
-                <Btn onClick={ack}><ShieldCheck size={14} /> I acknowledge & will abide</Btn></>}
+                {canModify(user) && <Btn onClick={ack}><ShieldCheck size={14} /> I acknowledge & will abide</Btn>}</>}
           </div>
           <div style={{ marginTop: 14, borderTop: `1px solid ${C.lineSoft}`, paddingTop: 12 }}>
             <div style={{ fontSize: 11, color: C.mute, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Team acknowledgements — v{state.constitutionVersion}</div>
@@ -2490,23 +2480,26 @@ export default function App() {
   const myPages = PAGES.filter((p) => pageAllowed(p, user));
   const groups = ["Daily","Workspaces","Property","Records"];
   const cw = (k) => canWritePage(k, user);
+  /* Hard read-only enforcement: for anyone but the Owner, every page receives a
+     no-op setState, so even a stray control can never persist a change. */
+  const writeState = canModify(user) ? setState : () => {};
 
   const Current = {
-    overview: <Overview state={state} setState={setState} user={user} goTo={setPage} />,
-    tasks: <Tasks state={state} setState={setState} user={user} />,
-    approvals: <Approvals state={state} setState={setState} user={user} />,
-    announcements: <Announcements state={state} setState={setState} user={user} />,
-    tenants: <Tenants state={state} setState={setState} canWrite={cw("tenants")} />,
-    capex: <Capex state={state} setState={setState} canWrite={cw("capex")} />,
-    marketing: <MarketingStudio state={state} setState={setState} user={user} />,
-    adminops: <AdminOps state={state} setState={setState} canWrite={cw("adminops")} />,
-    drawings: <Drawings state={state} setState={setState} canWrite={cw("drawings")} />,
-    layout: <MallLayout state={state} setState={setState} canWrite={cw("layout")} />,
-    documents: <Documents state={state} setState={setState} user={user} />,
-    meetings: <MeetingStudio state={state} setState={setState} user={user} />,
-    constitution: <Constitution state={state} setState={setState} user={user} />,
-    team: <Team state={state} setState={setState} user={user} liveStatus={liveStatus} />,
-  }[page] || <Overview state={state} setState={setState} user={user} goTo={setPage} />;
+    overview: <Overview state={state} setState={writeState} user={user} goTo={setPage} />,
+    tasks: <Tasks state={state} setState={writeState} user={user} />,
+    approvals: <Approvals state={state} setState={writeState} user={user} />,
+    announcements: <Announcements state={state} setState={writeState} user={user} />,
+    tenants: <Tenants state={state} setState={writeState} canWrite={cw("tenants")} />,
+    capex: <Capex state={state} setState={writeState} canWrite={cw("capex")} />,
+    marketing: <MarketingStudio state={state} setState={writeState} user={user} />,
+    adminops: <AdminOps state={state} setState={writeState} canWrite={cw("adminops")} />,
+    drawings: <Drawings state={state} setState={writeState} canWrite={cw("drawings")} />,
+    layout: <MallLayout state={state} setState={writeState} canWrite={cw("layout")} />,
+    documents: <Documents state={state} setState={writeState} user={user} />,
+    meetings: <MeetingStudio state={state} setState={writeState} user={user} />,
+    constitution: <Constitution state={state} setState={writeState} user={user} />,
+    team: <Team state={state} setState={writeState} user={user} liveStatus={liveStatus} />,
+  }[page] || <Overview state={state} setState={writeState} user={user} goTo={setPage} />;
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: SANS, display: "flex" }}>
@@ -2578,6 +2571,12 @@ export default function App() {
         </div>
       </div>
       <div style={{ flex: 1, minWidth: 0, padding: isMobile ? "64px 14px 60px" : "26px 26px 60px" }}>
+        {!canModify(user) && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18, padding: "10px 14px", background: `${C.blue}14`, border: `1px solid ${C.blue}44`, borderRadius: 10, fontSize: 12.5, color: C.mute, lineHeight: 1.5 }}>
+            <Eye size={15} color={C.blue} style={{ flexShrink: 0 }} />
+            <span><b style={{ color: C.text }}>View-only access.</b> You can see everything here, but changes are made by the Owner. Contact Rishi to update anything.</span>
+          </div>
+        )}
         {Current}
       </div>
     </div>
