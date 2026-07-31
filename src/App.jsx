@@ -241,6 +241,17 @@ const migrateState = (st) => {
 const FB_KEY = "kkbp-firebase-config";
 const loadFbConfig = () => { try { return JSON.parse(localStorage.getItem(FB_KEY) || "null"); } catch (e) { return null; } };
 const saveFbConfig = (cfg) => { try { if (cfg) localStorage.setItem(FB_KEY, JSON.stringify(cfg)); else localStorage.removeItem(FB_KEY); } catch (e) {} };
+/* A Firebase *web config* is not a secret (unlike an API key): it is designed
+   to ship inside client code, and access is governed by the database's
+   security rules, not by hiding the config. Baking it in below makes every
+   device join the shared workspace automatically — zero setup per person.
+   Set by the app administrator; a config pasted in Team & Access overrides it. */
+const DEFAULT_FB_CONFIG = null; /* e.g. { apiKey: "AIza…", authDomain: "….firebaseapp.com", projectId: "…", storageBucket: "…", appId: "…" } */
+const effectiveFbConfig = () => {
+  const saved = loadFbConfig();
+  if (saved && saved.disabled) return null; /* device explicitly went standalone */
+  return saved || DEFAULT_FB_CONFIG;
+};
 const CLIENT_ID = Math.random().toString(36).slice(2, 10);
 
 /* ---------- security: device identity, password hashing, login throttling ---------- */
@@ -629,7 +640,7 @@ function Login({ users, onLogin, onAttempt, liveOn }) {
 }
 
 /* ================= OVERVIEW ================= */
-function Overview({ state, setState, user, goTo }) {
+function Overview({ state, setState, user, goTo, liveStatus }) {
   const D = DEPTS[user.dept];
   const t = state.tenants;
   const signed = t.filter((x) => ["Agreement","Fit-out","Operational"].includes(x.status));
@@ -664,6 +675,12 @@ function Overview({ state, setState, user, goTo }) {
         const recent = (state.audit || []).filter((a) => a.byId !== user.id).slice(0, 7);
         return (
           <Card title="At a glance — what's new" style={{ marginBottom: 16, borderColor: `${C.gold}44` }}>
+            {liveStatus !== "on" && (
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 12px", background: `${C.amber}12`, border: `1px solid ${C.amber}44`, borderRadius: 8, marginBottom: 10, fontSize: 12.5, color: C.text, lineHeight: 1.5 }}>
+                <AlertTriangle size={14} color={C.amber} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span><b>Live sync is off on this device</b> — you're seeing this device's data only, not the team's. {isAppAdmin(user) ? "Connect the shared workspace in Team & Access to make every device live." : "Ask Rishi to connect the shared workspace."}</span>
+              </div>
+            )}
             {waiting.length > 0 && (
               <div onClick={() => goTo("approvals")} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: `${C.gold}14`, border: `1px solid ${C.gold}55`, borderRadius: 9, cursor: "pointer", marginBottom: 10 }}>
                 <Stamp size={17} color={C.gold} />
@@ -2802,7 +2819,7 @@ function ImportStudio({ state, setState, user, liveStatus }) {
   const [err, setErr] = useState("");
   const zipCtx = React.useRef(null);
   const key = (state.aiKey || "").trim();
-  const fb = loadFbConfig();
+  const fb = effectiveFbConfig();
   const log = (t) => setLogLines((L) => [...L, t]);
 
   const reset = () => { setPhase("idle"); setFileName(""); setInv(null); setLogLines([]); setProg({ done: 0, total: 0 }); setProposals(null); setErr(""); if (zipCtx.current?.reader) { try { zipCtx.current.reader.close(); } catch (e) {} } zipCtx.current = null; };
@@ -3203,10 +3220,10 @@ function Team({ state, setState, user, liveStatus }) {
             Status:{" "}
             <Badge text={liveStatus === "on" ? "Connected — every device updates live" : liveStatus === "connecting" ? "Connecting…" : liveStatus === "error" ? "Configured, but unreachable" : "Not connected — data stays on each device"} color={liveStatus === "on" ? C.green : liveStatus === "error" ? C.red : C.amber} />
           </div>
-          {!loadFbConfig() ? (
+          {!effectiveFbConfig() ? (
             <div style={{ marginTop: 12 }}>
               <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.7 }}>
-                One-time setup (about 5 minutes, free): 1) Go to <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer" style={{ color: C.blue }}>console.firebase.google.com</a> and create a project. 2) Build → Firestore Database → Create database → Start in <b>test mode</b>. 3) Project settings → Your apps → Web app → register, then copy the <b>firebaseConfig</b> block. 4) Paste it below on <b>every device</b> that should share data.
+                One-time setup (about 5 minutes, free): 1) Go to <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer" style={{ color: C.blue }}>console.firebase.google.com</a> and create a project. 2) Build → Firestore Database → Create database → Start in <b>test mode</b>. 3) Project settings → Your apps → Web app → register, then copy the <b>firebaseConfig</b> block. 4) Paste it below — and send the same block to the app developer to bake into the app, so <b>every other device connects automatically</b> with no setup.
               </div>
               <div style={{ marginTop: 10 }}>
                 <Ta rows={5} value={cfgText} onChange={(e) => setCfgText(e.target.value)} placeholder={'Paste the firebaseConfig here, e.g.\n{ apiKey: "AIza…", authDomain: "kkbp.firebaseapp.com", projectId: "kkbp-…", … }'} />
@@ -3225,16 +3242,20 @@ function Team({ state, setState, user, liveStatus }) {
                     alert("That doesn't look like a valid Firebase config. Paste the whole firebaseConfig block, including the { } braces.");
                   }
                 }}><LinkIcon size={14} /> Connect shared workspace</Btn>
+                {DEFAULT_FB_CONFIG && <>{" "}<Btn small ghost onClick={() => { saveFbConfig(null); location.reload(); }}>Reconnect built-in workspace</Btn></>}
               </div>
             </div>
           ) : (
             <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              <div style={{ fontSize: 12.5, color: C.mute }}>Project: <span style={{ color: C.text }}>{(loadFbConfig() || {}).projectId}</span></div>
-              <Btn small ghost tone={C.red} onClick={() => { if (confirm("Disconnect this device from the shared workspace? Data stays in the cloud; this device goes standalone.")) { saveFbConfig(null); location.reload(); } }}>Disconnect this device</Btn>
+              <div style={{ fontSize: 12.5, color: C.mute }}>
+                Project: <span style={{ color: C.text }}>{(effectiveFbConfig() || {}).projectId}</span>
+                {!loadFbConfig() && DEFAULT_FB_CONFIG && <Badge text="built into the app — all devices auto-connect" color={C.green} />}
+              </div>
+              <Btn small ghost tone={C.red} onClick={() => { if (confirm("Disconnect this device from the shared workspace? Data stays in the cloud; this device goes standalone.")) { saveFbConfig(loadFbConfig() ? null : { disabled: true }); location.reload(); } }}>Disconnect this device</Btn>
             </div>
           )}
           <div style={{ fontSize: 11.5, color: C.faint, marginTop: 12, lineHeight: 1.6 }}>
-            All connected devices share one live dataset — edits appear everywhere within a second or two. Keep the config internal: anyone holding it can reach the data while the database is in test mode.
+            All connected devices share one live dataset — edits appear everywhere within a second or two. Unlike the AI key, this config is safe to embed in the app: access is controlled by the database's own rules, not by hiding the config.
           </div>
         </Card>
       )}
@@ -3281,7 +3302,7 @@ export default function App() {
   const [saveTick, setSaveTick] = useState("");
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
   const [navOpen, setNavOpen] = useState(false);
-  const [liveStatus, setLiveStatus] = useState(loadFbConfig() ? "connecting" : "off"); // off | connecting | on | error
+  const [liveStatus, setLiveStatus] = useState(effectiveFbConfig() ? "connecting" : "off"); // off | connecting | on | error
   const remoteApply = React.useRef(false);
 
   useEffect(() => {
@@ -3314,7 +3335,7 @@ export default function App() {
         : stale ? resetToCleanSlate(loaded)
         : freshState()
       );
-      const cfg = loadFbConfig();
+      const cfg = effectiveFbConfig();
       if (!cfg) {
         finishBoot(base, false);
         if (!loaded || stale) await saveState(base); /* overwrite any stale local copy */
@@ -3370,6 +3391,17 @@ export default function App() {
     }, 600);
     return () => clearTimeout(t);
   }, [state]);
+
+  /* Same-device tabs stay live even without the cloud workspace: when another
+     tab saves, its storage event lands here and we adopt that state. */
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key !== SKEY || !e.newValue) return;
+      try { remoteApply.current = true; setState(migrateState({ ...freshState(), ...JSON.parse(e.newValue) })); } catch (err) {}
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   /* Security enforcement: if the Owner force-signs-out this session (kills) or
      locks the account, this device signs out as soon as the state syncs in. */
@@ -3436,7 +3468,7 @@ export default function App() {
   };
 
   const Current = {
-    overview: <Overview state={state} setState={writeState} user={user} goTo={setPage} />,
+    overview: <Overview state={state} setState={writeState} user={user} goTo={setPage} liveStatus={liveStatus} />,
     tasks: <Tasks state={state} setState={writeState} user={user} />,
     approvals: <Approvals state={state} setState={writeState} user={user} />,
     announcements: <Announcements state={state} setState={writeState} user={user} />,
@@ -3452,7 +3484,7 @@ export default function App() {
     import: <ImportStudio state={state} setState={writeState} user={user} liveStatus={liveStatus} />,
     security: <SecurityPage state={state} setState={writeState} user={user} liveStatus={liveStatus} />,
     team: <Team state={state} setState={writeState} user={user} liveStatus={liveStatus} />,
-  }[page] || <Overview state={state} setState={writeState} user={user} goTo={setPage} />;
+  }[page] || <Overview state={state} setState={writeState} user={user} goTo={setPage} liveStatus={liveStatus} />;
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: SANS, display: "flex" }}>
