@@ -93,30 +93,30 @@ const canWritePage = (key, u) => {
 const CMA_TARGET_L = 541;
 
 const SEED_USERS = [
-  { id:"u1", name:"Rishi Kothari", dept:"exec", subRole:"Owner / Promoter \u00b7 Oversees everything day-to-day \u00b7 IT & Digital (rishi@kkjpl.com)", tier:"head", exec:"owner", finApprover:true, appAdmin:true, username:"rishi", password:"7001" },
-  { id:"u2", name:"Nitin Kothari", dept:"exec", subRole:"Owner & Managing Director \u00b7 Final authority on every decision (nitin@kkjpl.com)", tier:"head", exec:"owner", finApprover:true, username:"nitin", password:"7002" },
-  { id:"u3", name:"Arjun Kothari", dept:"exec", subRole:"Owner / Promoter \u00b7 Brand & PR direction", tier:"head", exec:"owner", finApprover:true, username:"arjun", password:"7003" },
-  { id:"u4", name:"Manoj Agarwal", dept:"exec", subRole:"CEO \u2014 External consultant (MKA) \u00b7 Runs weekly cadence, CAM & sign-offs", tier:"head", exec:"ceo", username:"manoj", password:"7004" },
-  { id:"u5", name:"Sushil Ahuja", dept:"leasing", subRole:"Head of Leasing \u00b7 Consultant, Delhi (dedicated to TTJ since 1 Jun)", tier:"head", username:"sushil", password:"7005" },
-  { id:"u6", name:"Rateesh", dept:"leasing", subRole:"Leasing Consultant \u2014 Chennai \u00b7 South-India brand pipeline", tier:"external", username:"rateesh", password:"7006" },
-  { id:"u7", name:"Basha", dept:"leasing", subRole:"Leasing Coordinator \u2014 Nagpur \u00b7 On-ground client visits", tier:"member", username:"basha", password:"7007" },
-  { id:"u8", name:"Mayur", dept:"leasing", subRole:"Sales \u2014 Leasing enquiries", tier:"member", username:"mayur", password:"7008" },
+  { id:"u1", name:"Rishi Kothari", dept:"exec", subRole:"Owner / Promoter · Oversees everything day-to-day · IT & Digital (rishi@kkjpl.com)", tier:"head", exec:"owner", finApprover:true, appAdmin:true, username:"rishi", password:"7001" },
+  { id:"u2", name:"Nitin Kothari", dept:"exec", subRole:"Owner & Managing Director · Final authority on every decision (nitin@kkjpl.com)", tier:"head", exec:"owner", finApprover:true, username:"nitin", password:"7002" },
+  { id:"u3", name:"Arjun Kothari", dept:"exec", subRole:"Owner / Promoter · Brand & PR direction", tier:"head", exec:"owner", finApprover:true, username:"arjun", password:"7003" },
+  { id:"u4", name:"Manoj Agarwal", dept:"exec", subRole:"CEO — External consultant (MKA) · Runs weekly cadence, CAM & sign-offs", tier:"head", exec:"ceo", username:"manoj", password:"7004" },
+  { id:"u5", name:"Sushil Ahuja", dept:"leasing", subRole:"Head of Leasing · Consultant, Delhi (dedicated to TTJ since 1 Jun)", tier:"head", username:"sushil", password:"7005" },
+  { id:"u6", name:"Rateesh", dept:"leasing", subRole:"Leasing Consultant — Chennai · South-India brand pipeline", tier:"external", username:"rateesh", password:"7006" },
+  { id:"u7", name:"Basha", dept:"leasing", subRole:"Leasing Coordinator — Nagpur · On-ground client visits", tier:"member", username:"basha", password:"7007" },
+  { id:"u8", name:"Mayur", dept:"leasing", subRole:"Sales — Leasing enquiries", tier:"member", username:"mayur", password:"7008" },
   { id:"u9", name:"Priyanka Thakur", dept:"marketing", subRole:"Head of Marketing", tier:"head", username:"priyanka", password:"7009" },
-  { id:"u10", name:"Kirti Chaturvedi", dept:"marketing", subRole:"INIT Design Studio \u00b7 Creative & account lead (brochure, decks, VAMOS, shoot)", tier:"external", username:"kirti", password:"7010" },
-  { id:"u11", name:"Rajvi Merchant", dept:"marketing", subRole:"INIT Design Studio \u00b7 Brand strategy & nomenclature lead", tier:"external", username:"rajvi", password:"7011" },
-  { id:"u12", name:"Jeetu Surana", dept:"admin", subRole:"Head of Admin & Ops \u00b7 FEC Game Zone (Hyderabad)", tier:"head", username:"jeetu", password:"7012" },
-  { id:"u13", name:"Narayan", dept:"project", subRole:"Site Team \u2014 Nagpur \u00b7 Civil execution", tier:"member", username:"narayan", password:"7013" },
-  { id:"u14", name:"Prashant (Site)", dept:"project", subRole:"Site Engineer \u00b7 External development (trench, RWP, painting)", tier:"member", username:"prashant", password:"7014" },
-  { id:"u15", name:"Mahesh Gupta", dept:"project", subRole:"Liaison \u00b7 DP road / NIT / NMC & advertisement permissions", tier:"external", username:"mahesh", password:"7015" },
+  { id:"u10", name:"Kirti Chaturvedi", dept:"marketing", subRole:"INIT Design Studio · Creative & account lead (brochure, decks, VAMOS, shoot)", tier:"external", username:"kirti", password:"7010" },
+  { id:"u11", name:"Rajvi Merchant", dept:"marketing", subRole:"INIT Design Studio · Brand strategy & nomenclature lead", tier:"external", username:"rajvi", password:"7011" },
+  { id:"u12", name:"Jeetu Surana", dept:"admin", subRole:"Head of Admin & Ops · FEC Game Zone (Hyderabad)", tier:"head", username:"jeetu", password:"7012" },
+  { id:"u13", name:"Narayan", dept:"project", subRole:"Site Team — Nagpur · Civil execution", tier:"member", username:"narayan", password:"7013" },
+  { id:"u14", name:"Prashant (Site)", dept:"project", subRole:"Site Engineer · External development (trench, RWP, painting)", tier:"member", username:"prashant", password:"7014" },
+  { id:"u15", name:"Mahesh Gupta", dept:"project", subRole:"Liaison · DP road / NIT / NMC & advertisement permissions", tier:"external", username:"mahesh", password:"7015" },
   { id:"u16", name:"Pratham Pincha", dept:"project", subRole:"Sanctioning & approvals consultant", tier:"external", username:"pratham", password:"7016" },
-  { id:"u17", name:"Aniket Satone", dept:"design", subRole:"Principal Architect \u2014 In-house \u00b7 Drawings, RFIs, coordination (development@kkbp.in)", tier:"head", username:"aniket", password:"7017" },
-  { id:"u18", name:"Aviral (Lokre)", dept:"design", subRole:"Architect \u2014 Lokre, Ahmedabad \u00b7 External development, masterplan & signage", tier:"external", username:"aviral", password:"7018" },
-  { id:"u19", name:"Shah Chintan", dept:"design", subRole:"MEP Consultant \u2014 Jhaveri Associates (HVAC / electrical / CCTV)", tier:"external", username:"chintan", password:"7019" },
-  { id:"u20", name:"Samir Diwanji", dept:"design", subRole:"Plumbing & Drainage \u2014 Jhaveri Associates", tier:"external", username:"samir", password:"7020" },
-  { id:"u21", name:"Paresh Padole", dept:"design", subRole:"Electrical Consultant \u00b7 Transformers & liaisoning", tier:"external", username:"paresh", password:"7021" },
-  { id:"u22", name:"Karna Shah", dept:"marketing", subRole:"INIT Design Studio \u00b7 PR & partnerships lead", tier:"external", username:"karna", password:"7022" },
-  { id:"u23", name:"Sumit Bhaiya", dept:"admin", subRole:"KKBP Staff \u2014 Logistics & deliveries (Nagpur)", tier:"member", username:"sumit", password:"7023" },
-  { id:"u24", name:"Robin (INIT)", dept:"marketing", subRole:"INIT Design Studio \u00b7 Brand strategy (Singapore)", tier:"external", username:"robin", password:"7024" },
+  { id:"u17", name:"Aniket Satone", dept:"design", subRole:"Principal Architect — In-house · Drawings, RFIs, coordination (development@kkbp.in)", tier:"head", username:"aniket", password:"7017" },
+  { id:"u18", name:"Aviral (Lokre)", dept:"design", subRole:"Architect — Lokre, Ahmedabad · External development, masterplan & signage", tier:"external", username:"aviral", password:"7018" },
+  { id:"u19", name:"Shah Chintan", dept:"design", subRole:"MEP Consultant — Jhaveri Associates (HVAC / electrical / CCTV)", tier:"external", username:"chintan", password:"7019" },
+  { id:"u20", name:"Samir Diwanji", dept:"design", subRole:"Plumbing & Drainage — Jhaveri Associates", tier:"external", username:"samir", password:"7020" },
+  { id:"u21", name:"Paresh Padole", dept:"design", subRole:"Electrical Consultant · Transformers & liaisoning", tier:"external", username:"paresh", password:"7021" },
+  { id:"u22", name:"Karna Shah", dept:"marketing", subRole:"INIT Design Studio · PR & partnerships lead", tier:"external", username:"karna", password:"7022" },
+  { id:"u23", name:"Sumit Bhaiya", dept:"admin", subRole:"KKBP Staff — Logistics & deliveries (Nagpur)", tier:"member", username:"sumit", password:"7023" },
+  { id:"u24", name:"Robin (INIT)", dept:"marketing", subRole:"INIT Design Studio · Brand strategy (Singapore)", tier:"external", username:"robin", password:"7024" },
 ];
 
 const TENANT_CATS = ["Anchor Retail","Anchor Brand","Vanilla Retail","F&B","Entertainment","Department Store","Services","Pool / Unallocated"];
@@ -367,12 +367,14 @@ function auditDiff(prev, next, actor) {
 
 /* ================= CALCS & HELPERS ================= */
 function tenantMonthlyL(t) {
-  const area = +t.area || 0;
-  if (t.deal === "Pure Rent") return (area * (+t.rent || 0)) / 1e5;
-  if (t.deal === "Rev Share (area)") return (area * (+t.density || 0) * ((+t.share || 0) / 100)) / 1e5;
-  if (t.deal === "MRG + Rev Share") return Math.max(area * (+t.mrg || 0), area * (+t.density || 0) * ((+t.share || 0) / 100)) / 1e5;
-  if (t.deal === "Rev Share (turnover)") return (+t.salesL || 0) * ((+t.share || 0) / 100);
-  if (t.deal === "Self-Operated") return +t.salesL || 0;
+  const area = num(t.area);
+  if (t.deal === "Pure Rent") return (area * num(t.rent)) / 1e5;
+  /* Rev-share deals: rent payable = HIGHER of the revenue-share leg and the
+     base/minimum rental leg (the workbook's Base Rental column, stored in mrg). */
+  if (t.deal === "Rev Share (area)" || t.deal === "MRG + Rev Share")
+    return Math.max(area * num(t.mrg), area * num(t.density) * (num(t.share) / 100)) / 1e5;
+  if (t.deal === "Rev Share (turnover)") return num(t.salesL) * (num(t.share) / 100);
+  if (t.deal === "Self-Operated") return num(t.salesL);
   return 0;
 }
 /* ---------- Leasing deal ROI (mirrors the KKBP Leasing ROI Calculator xlsx) ----------
@@ -381,40 +383,56 @@ function tenantMonthlyL(t) {
    first 36 months of rent, net of the rent-free period and a collection haircut.
    ROI is quoted on rent-above-base (the sheet's primary screen) and on total rent. */
 const ROI_DEFAULTS = { escPct: 5, growPct: 8, rentFreeM: 3, collPct: 100, targetPaybackM: 36, targetRoiPct: 30 };
+/* Numbers typed with commas / spaces / ₹ ("18,000") must not silently become 0. */
+const num = (v) => { const n = parseFloat(String(v ?? "").replace(/[,\s₹%]/g, "")); return isFinite(n) ? n : 0; };
 function tenantRoi(t, cfg) {
   const c = { ...ROI_DEFAULTS, ...(cfg || {}) };
-  const area = +t.area || 0;
-  const esc = 1 + (+c.escPct || 0) / 100, grow = 1 + (+c.growPct || 0) / 100;
-  const coll = (+c.collPct || 0) / 100;
-  const rentFree = Math.max(0, Math.min(11, +c.rentFreeM || 0));
+  const area = num(t.area);
+  const esc = 1 + num(c.escPct) / 100, grow = 1 + num(c.growPct) / 100;
+  const coll = num(c.collPct) / 100;
+  const rentFree = Math.max(0, Math.min(11, num(c.rentFreeM)));
+  const share = num(t.share) / 100;
+  const density = num(t.density);
+  /* Base rental (₹/sft/mth) — the sheet's Base Rental column. Every rev-share
+     deal carries one (rent payable = MAX of the two legs); 0 = no minimum. */
+  const basePsf = t.deal === "Pure Rent" ? num(t.rent)
+    : (t.deal === "Rev Share (area)" || t.deal === "MRG + Rev Share") ? num(t.mrg) : 0;
   const legs = (yr) => { /* monthly ₹ legs in year yr (1-based) */
     const e = Math.pow(esc, yr - 1), g = Math.pow(grow, yr - 1);
-    let base = 0, vari = 0;
-    if (t.deal === "Pure Rent") base = area * (+t.rent || 0) * e;
-    else if (t.deal === "Rev Share (area)") vari = area * (+t.density || 0) * g * ((+t.share || 0) / 100);
-    else if (t.deal === "MRG + Rev Share") { base = area * (+t.mrg || 0) * e; vari = area * (+t.density || 0) * g * ((+t.share || 0) / 100); }
-    else if (t.deal === "Rev Share (turnover)") vari = (+t.salesL || 0) * 1e5 * g * ((+t.share || 0) / 100);
-    else if (t.deal === "Self-Operated") vari = (+t.salesL || 0) * 1e5 * g;
-    return { base, rent: Math.max(base, vari) };
+    const base = area * basePsf * e;
+    let vari = 0, sales = 0;
+    if (t.deal === "Rev Share (area)" || t.deal === "MRG + Rev Share") { sales = area * density * g; vari = sales * share; }
+    else if (t.deal === "Rev Share (turnover)") { sales = num(t.salesL) * 1e5 * g; vari = sales * share; }
+    else if (t.deal === "Self-Operated") { sales = num(t.salesL) * 1e5 * g; vari = sales; }
+    return { base, vari, sales, rent: Math.max(base, vari) };
   };
   const y = [1, 2, 3].map(legs);
   const rent36 = (y[0].rent * (12 - rentFree) + y[1].rent * 12 + y[2].rent * 12) * coll;
   const base36 = (y[0].base * (12 - rentFree) + y[1].base * 12 + y[2].base * 12) * coll;
   const above36 = rent36 - base36;
-  const capex = area * (+t.capexPsf || 0);
+  const capexPsf = num(t.capexPsf);
+  const capex = area * capexPsf;
   const perMoAbove = above36 / 36, perMoTotal = rent36 / 36;
   const paybackAbove = capex > 0 ? (perMoAbove > 0 ? capex / perMoAbove : Infinity) : 0;
   const paybackTotal = capex > 0 ? (perMoTotal > 0 ? capex / perMoTotal : Infinity) : 0;
   const roiAbove = capex > 0 ? (perMoAbove * 12) / capex : 0;
   const roiTotal = capex > 0 ? (perMoTotal * 12) / capex : 0;
   const verdict = capex <= 0 ? "n/a"
-    : (isFinite(paybackAbove) && paybackAbove <= (+c.targetPaybackM || 36) && roiAbove >= (+c.targetRoiPct || 0) / 100) ? "PASS" : "REVIEW";
-  return { capex, rentMo1: y[0].rent, aboveMo1: y[0].rent - y[0].base, rent36, above36, paybackAbove, paybackTotal, roiAbove, roiTotal, verdict };
+    : (isFinite(paybackAbove) && paybackAbove <= (num(c.targetPaybackM) || 36) && roiAbove >= num(c.targetRoiPct) / 100) ? "PASS" : "REVIEW";
+  return {
+    area, salesMo: y[0].sales, salesYr: y[0].sales * 12, sharePct: share * 100,
+    rsRentMo: y[0].vari, basePsf, baseMo: y[0].base, rentMo1: y[0].rent,
+    avgPsf: area ? y[0].rent / area : 0, annualRent: y[0].rent * 12,
+    aboveMo1: y[0].rent - y[0].base, aboveYr1: (y[0].rent - y[0].base) * 12,
+    capexPsf, capex, rent36, avg36Psf: area ? rent36 / (area * 36) : 0,
+    above36, avgAboveMo: above36 / 36,
+    paybackAbove, paybackTotal, roiAbove, roiTotal, verdict,
+  };
 }
 
-const fmtL = (v) => `₹${(+v || 0).toLocaleString("en-IN", { maximumFractionDigits: 1 })}L`;
-const fmtCr = (vL) => `₹${((+vL || 0) / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })} Cr`;
-const fmtSft = (v) => `${(+v || 0).toLocaleString("en-IN")} sft`;
+const fmtL = (v) => `₹${num(v).toLocaleString("en-IN", { maximumFractionDigits: 1 })}L`;
+const fmtCr = (vL) => `₹${(num(vL) / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })} Cr`;
+const fmtSft = (v) => `${num(v).toLocaleString("en-IN")} sft`;
 const uid = () => Math.random().toString(36).slice(2, 9);
 const today = () => new Date().toISOString().slice(0, 10);
 const uName = (state, id) => (state.users.find((u) => u.id === id) || {}).name || "—";
@@ -1051,25 +1069,30 @@ function Tenants({ state, setState, canWrite }) {
       </div>
 
       {tab === "roi" && (() => {
-        const rows = list.map((t) => ({ t, r: tenantRoi(t, roiCfg) }));
+        const rows = list.map((t, i) => ({ t, i, r: tenantRoi(t, roiCfg) }));
         const withCapex = rows.filter((x) => x.r.capex > 0);
-        const totCapex = rows.reduce((s, x) => s + x.r.capex, 0);
-        const totArea = rows.reduce((s, x) => s + (x.r.capex > 0 ? (+x.t.area || 0) : 0), 0);
-        const totRent36 = withCapex.reduce((s, x) => s + x.r.rent36, 0);
-        const totAbove36 = withCapex.reduce((s, x) => s + x.r.above36, 0);
-        const pfPayback = totAbove36 > 0 ? totCapex / (totAbove36 / 36) : Infinity;
-        const pfRoi = totCapex > 0 ? (totAbove36 / 36 * 12) / totCapex : 0;
+        /* Portfolio totals exactly per the workbook's TOTAL / WEIGHTED AVG row */
+        const S = (f) => rows.reduce((s, x) => s + (f(x.r) || 0), 0);
+        const tArea = S((r) => r.area), tSalesMo = S((r) => r.salesMo), tRsMo = S((r) => r.rsRentMo);
+        const tBaseMo = S((r) => r.baseMo), tPayMo = S((r) => r.rentMo1), tAboveMo = S((r) => r.aboveMo1);
+        const tCapex = S((r) => r.capex), tRent36 = S((r) => r.rent36), tAbove36 = S((r) => r.above36), tAvgAbove = S((r) => r.avgAboveMo);
+        const pfPayback = tAvgAbove > 0 ? tCapex / tAvgAbove : Infinity;
+        const pfPaybackTot = tRent36 > 0 ? tCapex / (tRent36 / 36) : Infinity;
+        const pfRoi = tCapex > 0 ? (tAbove36 / 36 * 12) / tCapex : 0;
+        const pfRoiTot = tCapex > 0 ? (tRent36 / 36 * 12) / tCapex : 0;
         const passN = withCapex.filter((x) => x.r.verdict === "PASS").length;
         const mo = (v) => v === 0 ? "—" : !isFinite(v) ? "No payback" : v.toFixed(1);
-        const pc = (v) => v ? `${(v * 100).toFixed(0)}%` : "—";
+        const pc = (v) => v ? `${(v * 100).toFixed(1)}%` : "—";
+        const rs = (v) => `₹${Math.round(v || 0).toLocaleString("en-IN")}`;
         const VC = { PASS: C.green, REVIEW: C.amber, "n/a": C.faint };
+        const GTh = ({ span, children }) => <th colSpan={span} style={{ padding: "8px 10px 2px", fontSize: 10, letterSpacing: 1.6, textTransform: "uppercase", color: C.gold, textAlign: "left", borderBottom: `1px solid ${C.lineSoft}`, whiteSpace: "nowrap" }}>{children}</th>;
         return (
           <div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 12 }}>
-              <KPI label="Landlord capex committed" value={fmtCr(totCapex / 1e5)} sub={`${withCapex.length} deal${withCapex.length === 1 ? "" : "s"} with capex`} tone={C.amber} />
-              <KPI label="Blended capex / sft" value={totArea ? `₹${Math.round(totCapex / totArea).toLocaleString("en-IN")}` : "—"} sub="on capex deals" tone={C.blue} />
-              <KPI label="Portfolio payback" value={isFinite(pfPayback) && totCapex ? `${pfPayback.toFixed(1)} mo` : "—"} sub="on rent above base" tone={pfPayback <= roiCfg.targetPaybackM ? C.green : C.red} />
-              <KPI label="Portfolio ROI p.a." value={pc(pfRoi)} sub="rent above base / capex" tone={pfRoi >= roiCfg.targetRoiPct / 100 ? C.green : C.red} />
+              <KPI label="Landlord capex committed" value={fmtCr(tCapex / 1e5)} sub={`${withCapex.length} deal${withCapex.length === 1 ? "" : "s"} with capex`} tone={C.amber} />
+              <KPI label="Blended capex / sft" value={tArea && tCapex ? rs(tCapex / tArea) : "—"} sub="across shown units" tone={C.blue} />
+              <KPI label="Portfolio payback" value={isFinite(pfPayback) && tCapex ? `${pfPayback.toFixed(1)} mo` : "—"} sub="on rent above base" tone={tCapex && pfPayback <= roiCfg.targetPaybackM ? C.green : C.red} />
+              <KPI label="Portfolio ROI p.a." value={tCapex ? pc(pfRoi) : "—"} sub="rent above base / capex" tone={pfRoi >= roiCfg.targetRoiPct / 100 ? C.green : C.red} />
               <KPI label="Deals clearing screen" value={`${passN}/${withCapex.length}`} sub={`payback ≤ ${roiCfg.targetPaybackM}m & ROI ≥ ${roiCfg.targetRoiPct}%`} tone={passN === withCapex.length && withCapex.length ? C.green : C.purple} />
             </div>
             <Card title="Assumptions (portfolio-wide)" style={{ marginBottom: 12 }}>
@@ -1082,38 +1105,93 @@ function Tenants({ state, setState, canWrite }) {
                 ))}
               </div>
               <div style={{ fontSize: 11.5, color: C.faint, marginTop: 10, lineHeight: 1.6 }}>
-                Screened over the first 36 months, matching the leasing ROI workbook: rent each year is the higher of the revenue-share and base legs; the base escalates, trade density grows; the rent-free months are deducted from year 1. A deal PASSES when capex is recovered from rent above base within the target payback and the annual ROI clears the target.
+                Mirrors the leasing ROI workbook: rent payable each year = HIGHER of (trade density × area × revenue share %) and (base rental × area); the base escalates, trade density grows; rent-free months are deducted from year 1; collections over the first 36 months are screened against capex. PASS = capex back from rent above base within the target payback AND annual ROI at or above target.
               </div>
             </Card>
             <Card pad={0}>
               <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1150 }}>
-                  <thead><tr>
-                    <Th>Tenant</Th><Th right>Area</Th><Th right>Capex ₹/sft</Th><Th right>Total capex</Th><Th right>Rent /mo (Y1)</Th><Th right>Above base /mo</Th><Th right>Rent 36M</Th><Th right>Above base 36M</Th><Th right>Payback (above)</Th><Th right>Payback (total)</Th><Th right>ROI% (above)</Th><Th right>ROI% (total)</Th><Th>Screen</Th>
-                  </tr></thead>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 2280 }}>
+                  <thead>
+                    <tr>
+                      <GTh span={2}></GTh><GTh span={3}>Sales</GTh><GTh span={7}>Rent</GTh><GTh span={2}>Above base</GTh><GTh span={2}>Capex</GTh><GTh span={4}>First 36 months</GTh><GTh span={5}>Returns</GTh>
+                    </tr>
+                    <tr>
+                      <Th>Sr</Th><Th>Unit / Tenant</Th>
+                      <Th right>Area (sft)</Th><Th right>Trade density (₹/sft/mo)</Th><Th right>Revenue – monthly</Th>
+                      <Th right>Rev share %</Th><Th right>Rev-share rent /mo</Th><Th right>Base rental (₹/sft/mo)</Th><Th right>Base rent /mo</Th><Th right>Rent payable /mo</Th><Th right>Avg rental (₹/sft/mo)</Th><Th right>Annual rental</Th>
+                      <Th right>/mo</Th><Th right>/yr</Th>
+                      <Th right>₹/sft</Th><Th right>Total</Th>
+                      <Th right>Total rent 36M</Th><Th right>Avg rent 36M (₹/sft/mo)</Th><Th right>Above base 36M</Th><Th right>Avg above base /mo</Th>
+                      <Th right>Payback – above base (mo)</Th><Th right>Payback – total rent (mo)</Th><Th right>ROI % p.a. (above)</Th><Th right>ROI % p.a. (total)</Th><Th>Deal test</Th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {rows.map(({ t, r }) => (
-                      <tr key={t.id} style={{ opacity: r.capex > 0 ? 1 : 0.55 }}>
-                        <Td><div style={{ fontWeight: 600 }}>{t.name}</div><div style={{ fontSize: 11, color: C.faint }}>{t.deal}</div></Td>
-                        <Td right>{t.area ? fmtSft(t.area) : "—"}</Td>
-                        <Td right>{+t.capexPsf ? `₹${(+t.capexPsf).toLocaleString("en-IN")}` : "—"}</Td>
-                        <Td right style={{ color: C.amber }}>{r.capex ? fmtL(r.capex / 1e5) : "—"}</Td>
-                        <Td right>{fmtL(r.rentMo1 / 1e5)}</Td>
+                    {rows.map(({ t, i, r }) => (
+                      <tr key={t.id}>
+                        <Td style={{ color: C.faint }}>{i + 1}</Td>
+                        <Td><div style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{t.name}</div><div style={{ fontSize: 10.5, color: C.faint, whiteSpace: "nowrap" }}>{t.category} · {t.deal}</div></Td>
+                        <Td right>{r.area ? r.area.toLocaleString("en-IN") : "—"}</Td>
+                        <Td right>{r.salesMo && r.area ? rs(r.salesMo / r.area) : "—"}</Td>
+                        <Td right>{r.salesMo ? fmtL(r.salesMo / 1e5) : "—"}</Td>
+                        <Td right>{r.sharePct ? `${r.sharePct.toFixed(1)}%` : "—"}</Td>
+                        <Td right>{r.rsRentMo ? fmtL(r.rsRentMo / 1e5) : "—"}</Td>
+                        <Td right style={{ color: r.basePsf ? C.text : C.faint }}>{r.basePsf ? rs(r.basePsf) : "0"}</Td>
+                        <Td right>{r.baseMo ? fmtL(r.baseMo / 1e5) : "—"}</Td>
+                        <Td right style={{ fontWeight: 600, color: C.gold }}>{fmtL(r.rentMo1 / 1e5)}</Td>
+                        <Td right>{r.avgPsf ? rs(r.avgPsf) : "—"}</Td>
+                        <Td right>{fmtL(r.annualRent / 1e5)}</Td>
                         <Td right style={{ color: C.teal }}>{fmtL(r.aboveMo1 / 1e5)}</Td>
+                        <Td right style={{ color: C.teal }}>{fmtL(r.aboveYr1 / 1e5)}</Td>
+                        <Td right>{r.capexPsf ? rs(r.capexPsf) : "—"}</Td>
+                        <Td right style={{ color: C.amber, fontWeight: 600 }}>{r.capex ? fmtL(r.capex / 1e5) : "—"}</Td>
                         <Td right>{fmtL(r.rent36 / 1e5)}</Td>
+                        <Td right>{r.avg36Psf ? rs(r.avg36Psf) : "—"}</Td>
                         <Td right style={{ color: C.teal }}>{fmtL(r.above36 / 1e5)}</Td>
-                        <Td right style={{ fontWeight: 600, color: r.capex ? (isFinite(r.paybackAbove) && r.paybackAbove <= roiCfg.targetPaybackM ? C.green : C.red) : C.faint }}>{mo(r.paybackAbove)}</Td>
+                        <Td right>{fmtL(r.avgAboveMo / 1e5)}</Td>
+                        <Td right style={{ fontWeight: 700, color: r.capex ? (isFinite(r.paybackAbove) && r.paybackAbove <= roiCfg.targetPaybackM ? C.green : C.red) : C.faint }}>{mo(r.paybackAbove)}</Td>
                         <Td right>{mo(r.paybackTotal)}</Td>
-                        <Td right style={{ fontWeight: 600, color: r.capex ? (r.roiAbove >= roiCfg.targetRoiPct / 100 ? C.green : C.red) : C.faint }}>{r.capex ? pc(r.roiAbove) : "—"}</Td>
+                        <Td right style={{ fontWeight: 700, color: r.capex ? (r.roiAbove >= roiCfg.targetRoiPct / 100 ? C.green : C.red) : C.faint }}>{r.capex ? pc(r.roiAbove) : "—"}</Td>
                         <Td right>{r.capex ? pc(r.roiTotal) : "—"}</Td>
                         <Td><Badge text={r.verdict} color={VC[r.verdict]} /></Td>
                       </tr>
                     ))}
+                    {rows.length > 0 && (
+                      <tr style={{ background: C.panel3 }}>
+                        <Td></Td>
+                        <Td style={{ fontWeight: 700, textTransform: "uppercase", fontSize: 11.5, letterSpacing: 0.6 }}>Total / wtd avg</Td>
+                        <Td right style={{ fontWeight: 700 }}>{tArea.toLocaleString("en-IN")}</Td>
+                        <Td right>{tArea && tSalesMo ? rs(tSalesMo / tArea) : "—"}</Td>
+                        <Td right style={{ fontWeight: 700 }}>{fmtL(tSalesMo / 1e5)}</Td>
+                        <Td right>{tSalesMo ? `${(tRsMo / tSalesMo * 100).toFixed(1)}%` : "—"}</Td>
+                        <Td right>{fmtL(tRsMo / 1e5)}</Td>
+                        <Td right>{tArea && tBaseMo ? rs(tBaseMo / tArea) : "—"}</Td>
+                        <Td right>{fmtL(tBaseMo / 1e5)}</Td>
+                        <Td right style={{ fontWeight: 700, color: C.gold }}>{fmtL(tPayMo / 1e5)}</Td>
+                        <Td right>{tArea ? rs(tPayMo / tArea) : "—"}</Td>
+                        <Td right style={{ fontWeight: 700 }}>{fmtL(tPayMo * 12 / 1e5)}</Td>
+                        <Td right style={{ color: C.teal }}>{fmtL(tAboveMo / 1e5)}</Td>
+                        <Td right style={{ color: C.teal }}>{fmtL(tAboveMo * 12 / 1e5)}</Td>
+                        <Td right>{tArea && tCapex ? rs(tCapex / tArea) : "—"}</Td>
+                        <Td right style={{ fontWeight: 700, color: C.amber }}>{tCapex ? fmtL(tCapex / 1e5) : "—"}</Td>
+                        <Td right style={{ fontWeight: 700 }}>{fmtL(tRent36 / 1e5)}</Td>
+                        <Td right>{tArea ? rs(tRent36 / (tArea * 36)) : "—"}</Td>
+                        <Td right style={{ fontWeight: 700, color: C.teal }}>{fmtL(tAbove36 / 1e5)}</Td>
+                        <Td right>{fmtL(tAvgAbove / 1e5)}</Td>
+                        <Td right style={{ fontWeight: 700, color: tCapex ? (isFinite(pfPayback) && pfPayback <= roiCfg.targetPaybackM ? C.green : C.red) : C.faint }}>{tCapex ? mo(pfPayback) : "—"}</Td>
+                        <Td right>{tCapex ? mo(pfPaybackTot) : "—"}</Td>
+                        <Td right style={{ fontWeight: 700, color: tCapex ? (pfRoi >= roiCfg.targetRoiPct / 100 ? C.green : C.red) : C.faint }}>{tCapex ? pc(pfRoi) : "—"}</Td>
+                        <Td right>{tCapex ? pc(pfRoiTot) : "—"}</Td>
+                        <Td></Td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
-                {rows.length === 0 && <Empty text="No tenants match these filters — add deals on the Rent Roll tab, with landlord capex where the brand demands it." />}
+                {rows.length === 0 && <Empty text="No tenants match these filters — add deals on the Rent Roll tab, with base rental and landlord capex per the deal." />}
               </div>
             </Card>
+            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 8, lineHeight: 1.6 }}>
+              Rent payable = HIGHER of (rev-share rent) and (base rent), exactly as in the ROI workbook. ROI is primarily measured on the rent earned above the base rental; units without landlord capex are screened n/a.
+            </div>
           </div>
         );
       })()}
@@ -1153,27 +1231,27 @@ function Tenants({ state, setState, canWrite }) {
             <Field label="Category"><Sel value={edit.category} onChange={(e) => setEdit({ ...edit, category: e.target.value })} options={TENANT_CATS} /></Field>
             <Field label="Floor"><Sel value={edit.floor} onChange={(e) => setEdit({ ...edit, floor: e.target.value })} options={[...FLOORS, "Multiple"]} /></Field>
             <Field label="Status"><Sel value={edit.status} onChange={(e) => setEdit({ ...edit, status: e.target.value })} options={TSTATUS} /></Field>
-            <Field label="Area (sft)"><Inp type="number" value={edit.area} onChange={(e) => setEdit({ ...edit, area: e.target.value })} /></Field>
+            <Field label="Area (sft)"><Inp inputMode="decimal" value={edit.area} onChange={(e) => setEdit({ ...edit, area: e.target.value })} /></Field>
             <Field label="Deal structure"><Sel value={edit.deal} onChange={(e) => setEdit({ ...edit, deal: e.target.value })} options={DEALS} /></Field>
-            {edit.deal === "Pure Rent" && <Field label="Rent (₹/sft/mo)"><Inp type="number" value={edit.rent} onChange={(e) => setEdit({ ...edit, rent: e.target.value })} /></Field>}
+            {edit.deal === "Pure Rent" && <Field label="Rent (₹/sft/mo)"><Inp inputMode="decimal" value={edit.rent} onChange={(e) => setEdit({ ...edit, rent: e.target.value })} /></Field>}
             {(edit.deal === "Rev Share (area)" || edit.deal === "MRG + Rev Share") && <>
-              <Field label="Trade density (₹/sft/mo)"><Inp type="number" value={edit.density} onChange={(e) => setEdit({ ...edit, density: e.target.value })} /></Field>
-              <Field label="Revenue share %"><Inp type="number" value={edit.share} onChange={(e) => setEdit({ ...edit, share: e.target.value })} /></Field>
+              <Field label="Trade density (₹/sft/mo)"><Inp inputMode="decimal" value={edit.density} onChange={(e) => setEdit({ ...edit, density: e.target.value })} /></Field>
+              <Field label="Revenue share %"><Inp inputMode="decimal" value={edit.share} onChange={(e) => setEdit({ ...edit, share: e.target.value })} /></Field>
+              <Field label="Base rental (₹/sft/mo) — minimum guarantee, 0 if none"><Inp inputMode="decimal" value={edit.mrg || ""} onChange={(e) => setEdit({ ...edit, mrg: e.target.value })} placeholder="Rent = higher of the two legs" /></Field>
             </>}
-            {edit.deal === "MRG + Rev Share" && <Field label="MRG (₹/sft/mo)"><Inp type="number" value={edit.mrg} onChange={(e) => setEdit({ ...edit, mrg: e.target.value })} /></Field>}
             {edit.deal === "Rev Share (turnover)" && <>
-              <Field label="Est. monthly sales (₹L)"><Inp type="number" value={edit.salesL} onChange={(e) => setEdit({ ...edit, salesL: e.target.value })} /></Field>
-              <Field label="Revenue share %"><Inp type="number" value={edit.share} onChange={(e) => setEdit({ ...edit, share: e.target.value })} /></Field>
+              <Field label="Est. monthly sales (₹L)"><Inp inputMode="decimal" value={edit.salesL} onChange={(e) => setEdit({ ...edit, salesL: e.target.value })} /></Field>
+              <Field label="Revenue share %"><Inp inputMode="decimal" value={edit.share} onChange={(e) => setEdit({ ...edit, share: e.target.value })} /></Field>
             </>}
-            {edit.deal === "Self-Operated" && <Field label="Net contribution (₹L/mo)"><Inp type="number" value={edit.salesL} onChange={(e) => setEdit({ ...edit, salesL: e.target.value })} /></Field>}
-            <Field label="Landlord capex (₹/sft) — if the brand requires fit-out contribution"><Inp type="number" value={edit.capexPsf || ""} onChange={(e) => setEdit({ ...edit, capexPsf: e.target.value })} placeholder="0 = no capex" /></Field>
+            {edit.deal === "Self-Operated" && <Field label="Net contribution (₹L/mo)"><Inp inputMode="decimal" value={edit.salesL} onChange={(e) => setEdit({ ...edit, salesL: e.target.value })} /></Field>}
+            <Field label="Landlord capex (₹/sft) — if the brand requires fit-out contribution"><Inp inputMode="decimal" value={edit.capexPsf || ""} onChange={(e) => setEdit({ ...edit, capexPsf: e.target.value })} placeholder="0 = no capex" /></Field>
             <Field label="Point of contact"><Inp value={edit.poc} onChange={(e) => setEdit({ ...edit, poc: e.target.value })} /></Field>
           </div>
           <div style={{ marginTop: 12 }}><Field label="Notes"><Ta value={edit.notes} onChange={(e) => setEdit({ ...edit, notes: e.target.value })} /></Field></div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, flexWrap: "wrap", gap: 8 }}>
             <div style={{ fontSize: 13, color: C.mute }}>
               Income: <span style={{ color: C.gold, ...NUM }}>{fmtL(tenantMonthlyL(edit))}/mo</span>
-              {+edit.capexPsf > 0 && +edit.area > 0 && (() => {
+              {num(edit.capexPsf) > 0 && num(edit.area) > 0 && (() => {
                 const r = tenantRoi(edit, roiCfg);
                 return <> · Capex: <span style={{ color: C.amber, ...NUM }}>{fmtL(r.capex / 1e5)}</span> · Payback: <span style={{ color: isFinite(r.paybackAbove) && r.paybackAbove <= roiCfg.targetPaybackM ? C.green : C.red, ...NUM }}>{isFinite(r.paybackAbove) ? r.paybackAbove.toFixed(1) + " mo" : "no payback"}</span> · <Badge text={r.verdict} color={r.verdict === "PASS" ? C.green : C.amber} /></>;
               })()}
