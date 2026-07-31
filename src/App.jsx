@@ -246,7 +246,15 @@ const saveFbConfig = (cfg) => { try { if (cfg) localStorage.setItem(FB_KEY, JSON
    security rules, not by hiding the config. Baking it in below makes every
    device join the shared workspace automatically — zero setup per person.
    Set by the app administrator; a config pasted in Team & Access overrides it. */
-const DEFAULT_FB_CONFIG = null; /* e.g. { apiKey: "AIza…", authDomain: "….firebaseapp.com", projectId: "…", storageBucket: "…", appId: "…" } */
+const DEFAULT_FB_CONFIG = {
+  apiKey: "AIzaSyDs2PVrz_a3V3QkQal0NPP2Kh00MDdQXMo",
+  authDomain: "kkbpdashv2.firebaseapp.com",
+  databaseURL: "https://kkbpdashv2-default-rtdb.firebaseio.com",
+  projectId: "kkbpdashv2",
+  storageBucket: "kkbpdashv2.firebasestorage.app",
+  messagingSenderId: "187384327940",
+  appId: "1:187384327940:web:b337806b51b116c6db2a51",
+};
 const effectiveFbConfig = () => {
   const saved = loadFbConfig();
   if (saved && saved.disabled) return null; /* device explicitly went standalone */
@@ -337,6 +345,10 @@ const freshState = () => ({
   sessions: {},    /* "userId|deviceId" → {u, d, ua, in, seen} */
   kills: {},       /* "userId|deviceId" or "userId|*" → ts; sessions started before ts are signed out */
 });
+/* How much real content a state holds — used to stop an empty cloud workspace
+   from shadowing a device that already carries real data. */
+const RECORD_COLS = ["tenants","capex","campaigns","content","compliance","vendors","drawings","rfis","zones","tasks","approvals","announcements","meetings","docs"];
+const recordCount = (st) => RECORD_COLS.reduce((n, k) => n + ((st && st[k]) || []).length, 0);
 /* Fresh workspace, but carry forward the shared AI key (a credential, not sample
    data) so a reset doesn't knock the AI Notetaker offline for everyone. */
 const resetToCleanSlate = (prev) => {
@@ -3355,7 +3367,13 @@ export default function App() {
             if (msg.exists) {
               try {
                 const cloud = JSON.parse(msg.data);
-                if (cloud.dataEpoch === DATA_EPOCH) { finishBoot(migrateState({ ...freshState(), ...cloud }), true); return; }
+                if (cloud.dataEpoch === DATA_EPOCH) {
+                  /* An empty cloud (freshly seeded by a blank device) must not
+                     shadow a device that already holds real records — keep the
+                     local data and push it up as the workspace's content. */
+                  if (recordCount(cloud) === 0 && recordCount(base) > 0) { finishBoot(base, false); return; }
+                  finishBoot(migrateState({ ...freshState(), ...cloud }), true); return;
+                }
                 /* shared workspace holds pre-reset data — replace it with the clean slate and push up */
                 finishBoot(migrateState(resetToCleanSlate(cloud)), false); return;
               } catch (e) {}
