@@ -66,6 +66,7 @@ const PAGES = [
   { key: "meetings",     label: "Meetings & AI Notes", icon: NotebookPen,     group: "Records" },
   { key: "constitution", label: "Constitution",       icon: ScrollText,      group: "Records" },
   { key: "import",       label: "Import Studio",      icon: Upload,          group: "Records", owner: true },
+  { key: "security",     label: "Security",           icon: ShieldCheck,     group: "Records", owner: true },
   { key: "team",         label: "Team & Access",      icon: Users,           group: "Records", owner: true },
 ];
 /* `owner: true` pages (settings — team, API key, live workspace, import/export)
@@ -207,7 +208,7 @@ const saveSession = (s) => { try { if (s) sessionStorage.setItem(SESS_KEY, JSON.
 const slugUser = (name) => (name || "user").toLowerCase().replace(/[^a-z0-9]+/g, ".").replace(/(^\.)|(\.$)/g, "");
 const migrateState = (st) => ({
   ...st,
-  users: (st.users || []).map((u) => ({ ...u, username: u.username || slugUser(u.name), password: u.password || u.pin || "0000" })),
+  users: (st.users || []).map((u) => ({ ...u, username: u.username || slugUser(u.name), password: u.pwHash ? "" : (u.password || u.pin || "0000") })),
 });
 
 /* ================= LIVE SYNC (shared workspace via Firebase Firestore) =================
@@ -218,6 +219,41 @@ const FB_KEY = "kkbp-firebase-config";
 const loadFbConfig = () => { try { return JSON.parse(localStorage.getItem(FB_KEY) || "null"); } catch (e) { return null; } };
 const saveFbConfig = (cfg) => { try { if (cfg) localStorage.setItem(FB_KEY, JSON.stringify(cfg)); else localStorage.removeItem(FB_KEY); } catch (e) {} };
 const CLIENT_ID = Math.random().toString(36).slice(2, 10);
+
+/* ---------- security: device identity, password hashing, login throttling ---------- */
+/* A stable per-browser device id, so the Owner can see which device each
+   session lives on and sign out a specific one. */
+const DEVICE_ID = (() => {
+  try {
+    let d = localStorage.getItem("kkbp-device-id");
+    if (!d) { d = "d-" + Math.random().toString(36).slice(2, 10); localStorage.setItem("kkbp-device-id", d); }
+    return d;
+  } catch (e) { return "d-" + CLIENT_ID; }
+})();
+const uaInfo = () => {
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  const os = /iPhone|iPad/.test(ua) ? "iPhone/iPad" : /Android/.test(ua) ? "Android" : /Mac/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : "Unknown OS";
+  const br = /Edg\//.test(ua) ? "Edge" : /OPR\//.test(ua) ? "Opera" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : /Firefox\//.test(ua) ? "Firefox" : "Browser";
+  return `${br} · ${os}`;
+};
+/* Passwords are stored as salted SHA-256 hashes. Legacy plaintext passwords
+   still verify and are upgraded to a hash on first successful login. */
+const genSalt = () => Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 12);
+async function sha256Hex(s) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function hashPassword(pw, salt) { return await sha256Hex(salt + "::" + pw); }
+async function verifyPassword(u, pw) {
+  if (u.pwHash && u.pwSalt) return (await hashPassword(pw, u.pwSalt)) === u.pwHash;
+  return (u.password || "") === pw; /* legacy plaintext */
+}
+/* Device-local brute-force throttle: 5 failed tries per username → 15 min lock. */
+const FAILS_KEY = "kkbp-login-fails";
+const loadFails = () => { try { return JSON.parse(localStorage.getItem(FAILS_KEY) || "{}"); } catch (e) { return {}; } };
+const recordFail = (un) => { try { const f = loadFails(); f[un] = [...(f[un] || []).filter((t) => Date.now() - t < 15 * 60000), Date.now()]; localStorage.setItem(FAILS_KEY, JSON.stringify(f)); return f[un].length; } catch (e) { return 0; } };
+const failsLeft = (un) => { const f = (loadFails()[un] || []).filter((t) => Date.now() - t < 15 * 60000); return { count: f.length, oldest: f[0] || 0 }; };
+const clearFails = (un) => { try { const f = loadFails(); delete f[un]; localStorage.setItem(FAILS_KEY, JSON.stringify(f)); } catch (e) {} };
 let fbDocRef = null, fbSetDoc = null;
 async function connectLive(cfg, onSnap) {
   const { initializeApp } = await import("firebase/app");
@@ -255,6 +291,11 @@ const freshState = () => ({
   aiKey: "",
   log: [{ ts: Date.now(), by: "System", text: "TTJ Team OS initialised — clean workspace, official channel live." }],
   acks: {}, constitutionVersion: 2, dataEpoch: DATA_EPOCH,
+  /* security registers */
+  audit: [],       /* every add/edit/delete: {ts, by, byId, d(evice), col, action, name, fields} */
+  loginEvents: [], /* {ts, un, ok, uid, d, ua} — successes and failures */
+  sessions: {},    /* "userId|deviceId" → {u, d, ua, in, seen} */
+  kills: {},       /* "userId|deviceId" or "userId|*" → ts; sessions started before ts are signed out */
 });
 /* Fresh workspace, but carry forward the shared AI key (a credential, not sample
    data) so a reset doesn't knock the AI Notetaker offline for everyone. */
@@ -263,6 +304,36 @@ const resetToCleanSlate = (prev) => {
   if (prev && prev.aiKey) f.aiKey = prev.aiKey;
   return f;
 };
+
+/* ---------- central audit: diff old vs new state, record who changed what ---------- */
+const AUDIT_COLS = {
+  users: (r) => r.name, tenants: (r) => r.name, capex: (r) => r.name, campaigns: (r) => r.name,
+  content: (r) => r.title, compliance: (r) => r.name, vendors: (r) => r.name, drawings: (r) => r.title,
+  rfis: (r) => r.title, zones: (r) => r.name, tasks: (r) => r.title, approvals: (r) => r.title,
+  announcements: (r) => r.title, meetings: (r) => r.title, docs: (r) => r.name,
+};
+function auditDiff(prev, next, actor) {
+  const out = [];
+  const ts = Date.now();
+  for (const col of Object.keys(AUDIT_COLS)) {
+    const a = prev[col] || [], b = next[col] || [];
+    if (a === b) continue;
+    const nameOf = AUDIT_COLS[col];
+    const aById = new Map(a.map((r) => [r.id, r]));
+    const bById = new Map(b.map((r) => [r.id, r]));
+    for (const [id, r] of bById) {
+      const old = aById.get(id);
+      if (!old) out.push({ ts, by: actor.name, byId: actor.id, d: DEVICE_ID, col, action: "added", name: nameOf(r) || id, fields: "" });
+      else if (old !== r && JSON.stringify(old) !== JSON.stringify(r)) {
+        const fields = Object.keys(r).filter((k) => JSON.stringify(r[k]) !== JSON.stringify(old[k])).slice(0, 6).join(", ");
+        out.push({ ts, by: actor.name, byId: actor.id, d: DEVICE_ID, col, action: "updated", name: nameOf(r) || id, fields });
+      }
+    }
+    for (const [id, r] of aById) if (!bById.has(id)) out.push({ ts, by: actor.name, byId: actor.id, d: DEVICE_ID, col, action: "deleted", name: nameOf(r) || id, fields: "" });
+  }
+  if ((prev.aiKey || "") !== (next.aiKey || "")) out.push({ ts, by: actor.name, byId: actor.id, d: DEVICE_ID, col: "settings", action: "updated", name: "AI key", fields: "" });
+  return out;
+}
 
 /* ================= CALCS & HELPERS ================= */
 function tenantMonthlyL(t) {
@@ -370,18 +441,39 @@ const SectionTitle = ({ eyebrow, title, sub, accent }) => (
 
 
 /* ================= LOGIN ================= */
-function Login({ users, onLogin, liveOn }) {
+function Login({ users, onLogin, onAttempt, liveOn }) {
   const [un, setUn] = useState("");
   const [pw, setPw] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const [err, setErr] = useState("");
-  const tryLogin = () => {
-    const u = users.find((x) => (x.username || "").toLowerCase() === un.trim().toLowerCase());
-    if (!u || (u.password || "") !== pw) {
-      setErr("Incorrect username or password. Ask the Owner if you need a reset.");
-      setPw("");
+  const [busy, setBusy] = useState(false);
+  const tryLogin = async () => {
+    if (busy) return;
+    const uname = un.trim().toLowerCase();
+    const fl = failsLeft(uname);
+    if (fl.count >= 5) {
+      const mins = Math.max(1, Math.ceil((fl.oldest + 15 * 60000 - Date.now()) / 60000));
+      setErr(`Too many failed attempts. This device is locked for ${mins} more minute${mins > 1 ? "s" : ""}.`);
       return;
     }
-    onLogin(u);
+    setBusy(true);
+    try {
+      const u = users.find((x) => (x.username || "").toLowerCase() === uname);
+      const ok = u && !u.locked && (await verifyPassword(u, pw));
+      if (!ok) {
+        const n = recordFail(uname);
+        onAttempt && onAttempt({ un: uname, ok: false });
+        setErr(u && u.locked
+          ? "This account is locked. Contact the Owner to restore access."
+          : n >= 5
+          ? "Too many failed attempts. This device is locked for 15 minutes."
+          : `Incorrect username or password.${n >= 3 ? ` ${5 - n} attempt${5 - n === 1 ? "" : "s"} left before a 15-minute lock.` : ""}`);
+        setPw("");
+        return;
+      }
+      clearFails(uname);
+      onLogin(u, pw);
+    } finally { setBusy(false); }
   };
   return (
     <div style={{ minHeight: "100vh", background: `radial-gradient(1200px 600px at 70% -10%, #1A2330 0%, ${C.bg} 55%)`, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px", fontFamily: SANS }}>
@@ -403,14 +495,17 @@ function Login({ users, onLogin, liveOn }) {
           </Field>
           <div style={{ marginTop: 14 }}>
             <Field label="Password">
-              <Inp type="password" value={pw}
-                onChange={(e) => { setPw(e.target.value); setErr(""); }}
-                onKeyDown={(e) => e.key === "Enter" && tryLogin()} placeholder="••••••••" />
+              <div style={{ position: "relative" }}>
+                <Inp type={showPw ? "text" : "password"} value={pw}
+                  onChange={(e) => { setPw(e.target.value); setErr(""); }}
+                  onKeyDown={(e) => e.key === "Enter" && tryLogin()} placeholder="••••••••" style={{ paddingRight: 38 }} />
+                <Eye size={15} color={showPw ? C.gold : C.faint} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", cursor: "pointer" }} onClick={() => setShowPw(!showPw)} />
+              </div>
             </Field>
           </div>
           {err && <div style={{ color: C.red, fontSize: 12, marginTop: 12 }}>{err}</div>}
           <div style={{ marginTop: 18 }}>
-            <Btn onClick={tryLogin} disabled={!un.trim() || !pw}><KeyRound size={14} /> Sign in</Btn>
+            <Btn onClick={tryLogin} disabled={!un.trim() || !pw || busy}>{busy ? <Loader2 size={14} className="spin" /> : <KeyRound size={14} />} Sign in</Btn>
           </div>
           <div style={{ color: C.faint, fontSize: 11, marginTop: 14, lineHeight: 1.6 }}>
             Usernames and passwords are managed by the Owner under Team &amp; Access. Change the defaults on first run.
@@ -2237,6 +2332,185 @@ function Constitution({ state, setState, user }) {
   );
 }
 
+/* ================= SECURITY (owner-only) ================= */
+const fmtTs = (ts) => ts ? new Date(ts).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
+function SecurityPage({ state, setState, user, liveStatus }) {
+  const [auditWho, setAuditWho] = useState("All");
+  const [auditCol, setAuditCol] = useState("All");
+  const now = Date.now();
+  const users = state.users;
+  const uName2 = (id) => (users.find((x) => x.id === id) || {}).name || id || "unknown";
+  const sessions = Object.values(state.sessions || {}).sort((a, b) => b.seen - a.seen);
+  const events = state.loginEvents || [];
+  const audit = state.audit || [];
+  const online = sessions.filter((s) => now - s.seen < 5 * 60000);
+  const fails24 = events.filter((e) => !e.ok && now - e.ts < 86400000);
+
+  /* ---- suspicious activity heuristics ---- */
+  const flags = [];
+  { /* burst of failed logins per username (15-min window) */
+    const byUn = {};
+    events.filter((e) => !e.ok && now - e.ts < 86400000).forEach((e) => { (byUn[e.un] = byUn[e.un] || []).push(e); });
+    Object.entries(byUn).forEach(([un, evs]) => {
+      const sorted = evs.map((e) => e.ts).sort();
+      for (let i = 0; i + 4 < sorted.length; i++) if (sorted[i + 4] - sorted[i] < 15 * 60000) { flags.push({ sev: "high", text: `${evs.length} failed sign-in attempts on "${un}" in the last 24h (5+ within 15 minutes — possible password guessing).` }); break; }
+    });
+  }
+  { /* one account on many devices in 24h */
+    const byUser = {};
+    events.filter((e) => e.ok && now - e.ts < 86400000).forEach((e) => { (byUser[e.uid] = byUser[e.uid] || new Set()).add(e.d); });
+    Object.entries(byUser).forEach(([uid, devs]) => { if (devs.size >= 3) flags.push({ sev: "med", text: `${uName2(uid)} signed in from ${devs.size} different devices in the last 24h.` }); });
+  }
+  { /* first sign-in from a never-before-seen device */
+    const seenBefore = {};
+    [...events].reverse().forEach((e) => {
+      if (!e.ok || !e.uid) return;
+      const k = e.uid + "|" + e.d;
+      if (!seenBefore[k]) { seenBefore[k] = true; if (now - e.ts < 86400000 && Object.keys(seenBefore).filter((x) => x.startsWith(e.uid + "|")).length > 1) flags.push({ sev: "low", text: `${uName2(e.uid)} signed in from a new device (${e.ua}) — ${fmtTs(e.ts)}.` }); }
+    });
+  }
+  { /* mass deletions in a short window */
+    const dels = audit.filter((a) => a.action === "deleted" && now - a.ts < 86400000);
+    const byActor = {};
+    dels.forEach((a) => { (byActor[a.byId] = byActor[a.byId] || []).push(a.ts); });
+    Object.entries(byActor).forEach(([uid, tss]) => {
+      const sorted = tss.sort();
+      for (let i = 0; i + 9 < sorted.length; i++) if (sorted[i + 9] - sorted[i] < 10 * 60000) { flags.push({ sev: "high", text: `${uName2(uid)} deleted ${tss.length} records in the last 24h (10+ within 10 minutes).` }); break; }
+    });
+  }
+
+  const killSession = (s) => { if (confirm(`Sign ${uName2(s.u)} out of this device?`)) setState((st) => withLog({ ...st, kills: { ...(st.kills || {}), [`${s.u}|${s.d}`]: Date.now() } }, user.name, `force-signed-out ${uName2(s.u)} (device ${s.d})`)); };
+  const killAll = (uid) => { if (confirm(`Sign ${uName2(uid)} out everywhere?`)) setState((st) => withLog({ ...st, kills: { ...(st.kills || {}), [`${uid}|*`]: Date.now() } }, user.name, `force-signed-out ${uName2(uid)} on all devices`)); };
+  const toggleLock = (u) => {
+    if (u.id === user.id) return alert("You cannot lock your own account.");
+    if (confirm(u.locked ? `Unlock ${u.name}'s account?` : `Lock ${u.name}'s account? They will be signed out and cannot sign in until unlocked.`))
+      setState((st) => withLog({ ...st, users: st.users.map((x) => x.id === u.id ? { ...x, locked: !u.locked } : x), kills: u.locked ? st.kills : { ...(st.kills || {}), [`${u.id}|*`]: Date.now() } }, user.name, `${u.locked ? "unlocked" : "locked"} ${u.name}'s account`));
+  };
+
+  const auditView = audit.filter((a) => (auditWho === "All" || a.byId === auditWho) && (auditCol === "All" || a.col === auditCol)).slice(0, 120);
+  const SEV = { high: C.red, med: C.amber, low: C.blue };
+
+  return (
+    <div>
+      <SectionTitle eyebrow="Records · Owner" title="Security" sub="Who is signed in where, every change anyone makes, and anything that looks off. Passwords are stored as salted hashes; sign-outs and locks reach every connected device through the live workspace." />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 14 }}>
+        <KPI label="Online now" value={online.length} sub="active in last 5 min" tone={C.green} />
+        <KPI label="Sessions on record" value={sessions.length} sub="devices that signed in" tone={C.blue} />
+        <KPI label="Failed sign-ins (24h)" value={fails24.length} sub={`${events.filter((e) => e.ok && now - e.ts < 86400000).length} successful`} tone={fails24.length ? C.amber : C.faint} />
+        <KPI label="Alerts" value={flags.length} sub="suspicious patterns" tone={flags.length ? C.red : C.faint} />
+      </div>
+
+      <Card title="Suspicious activity" style={{ marginBottom: 12 }}>
+        {flags.length === 0 && <div style={{ fontSize: 13, color: C.faint }}>Nothing unusual — no failed-login bursts, unexpected devices or mass deletions in the last 24 hours.</div>}
+        <div style={{ display: "grid", gap: 8 }}>
+          {flags.map((f, i) => (
+            <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "9px 12px", background: `${SEV[f.sev]}11`, border: `1px solid ${SEV[f.sev]}44`, borderRadius: 8 }}>
+              <AlertTriangle size={15} color={SEV[f.sev]} style={{ flexShrink: 0, marginTop: 1 }} />
+              <div style={{ fontSize: 12.5, color: C.text, lineHeight: 1.5 }}>{f.text}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card title="Active sessions & devices" style={{ marginBottom: 12 }} pad={0}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
+            <thead><tr><Th>Member</Th><Th>Device</Th><Th>Signed in</Th><Th>Last seen</Th><Th>Status</Th><Th right>Actions</Th></tr></thead>
+            <tbody>
+              {sessions.map((s) => {
+                const isOnline = now - s.seen < 5 * 60000;
+                const me = s.u === user.id && s.d === DEVICE_ID;
+                return (
+                  <tr key={s.u + s.d}>
+                    <Td style={{ fontWeight: 600 }}>{uName2(s.u)}{me && <span style={{ color: C.gold, fontSize: 10.5, marginLeft: 6 }}>(this device)</span>}</Td>
+                    <Td style={{ color: C.mute, fontSize: 12 }}>{s.ua} · {s.d}</Td>
+                    <Td style={{ color: C.mute, fontSize: 12 }}>{fmtTs(s.in)}</Td>
+                    <Td style={{ color: C.mute, fontSize: 12 }}>{ago(s.seen)} ago</Td>
+                    <Td><Badge text={isOnline ? "Online" : "Offline"} color={isOnline ? C.green : C.faint} /></Td>
+                    <Td right>
+                      {!me && <>
+                        <Btn small ghost onClick={() => killSession(s)}>Sign out</Btn>{" "}
+                        <Btn small ghost tone={C.red} onClick={() => killAll(s.u)}>Everywhere</Btn>
+                      </>}
+                    </Td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {sessions.length === 0 && <Empty text="No sessions recorded yet — they appear as people sign in." />}
+        </div>
+      </Card>
+
+      <Card title="Account locks" style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: C.faint, marginBottom: 10 }}>Locking signs the person out everywhere and blocks sign-in until unlocked. {liveStatus !== "on" && "Reaches other devices once the live workspace is connected."}</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {users.filter((u) => u.id !== user.id).map((u) => (
+            <button key={u.id} onClick={() => toggleLock(u)} title={u.locked ? "Unlock" : "Lock"} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: u.locked ? `${C.red}18` : "transparent", color: u.locked ? C.red : C.mute, border: `1px solid ${u.locked ? C.red + "66" : C.line}`, borderRadius: 8, padding: "6px 12px", fontSize: 12.5, cursor: "pointer", fontFamily: SANS }}>
+              <KeyRound size={12} /> {u.name}{u.locked ? " — locked" : ""}
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      <Card title="Sign-in history" style={{ marginBottom: 12 }} pad={0}>
+        <div style={{ overflowX: "auto", maxHeight: 320, overflowY: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 560 }}>
+            <thead><tr><Th>When</Th><Th>Account</Th><Th>Device</Th><Th>Result</Th></tr></thead>
+            <tbody>
+              {events.slice(0, 60).map((e, i) => (
+                <tr key={i}>
+                  <Td style={{ color: C.mute, fontSize: 12 }}>{fmtTs(e.ts)}</Td>
+                  <Td style={{ fontWeight: 600 }}>{e.ok ? uName2(e.uid) : e.un}</Td>
+                  <Td style={{ color: C.mute, fontSize: 12 }}>{e.ua} · {e.d}</Td>
+                  <Td><Badge text={e.ok ? "Signed in" : "Failed"} color={e.ok ? C.green : C.red} /></Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {events.length === 0 && <Empty text="No sign-ins recorded yet." />}
+        </div>
+      </Card>
+
+      <Card title="Audit trail — every change" pad={0}>
+        <div style={{ display: "flex", gap: 8, padding: "12px 14px 0", flexWrap: "wrap" }}>
+          <select value={auditWho} onChange={(e) => setAuditWho(e.target.value)} style={{ ...inputSt, width: 200 }}>
+            <option value="All">Everyone</option>
+            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+          <select value={auditCol} onChange={(e) => setAuditCol(e.target.value)} style={{ ...inputSt, width: 180 }}>
+            <option value="All">All registers</option>
+            {[...new Set(audit.map((a) => a.col))].map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div style={{ overflowX: "auto", maxHeight: 420, overflowY: "auto", marginTop: 10 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
+            <thead><tr><Th>When</Th><Th>Who</Th><Th>Action</Th><Th>Record</Th><Th>Fields</Th><Th>Device</Th></tr></thead>
+            <tbody>
+              {auditView.map((a, i) => (
+                <tr key={i}>
+                  <Td style={{ color: C.mute, fontSize: 12 }}>{fmtTs(a.ts)}</Td>
+                  <Td style={{ fontWeight: 600 }}>{a.by}</Td>
+                  <Td><Badge text={`${a.action} · ${a.col}`} color={a.action === "deleted" ? C.red : a.action === "added" ? C.green : C.blue} /></Td>
+                  <Td style={{ fontSize: 12.5 }}>{a.name}</Td>
+                  <Td style={{ color: C.faint, fontSize: 11.5 }}>{a.fields}</Td>
+                  <Td style={{ color: C.faint, fontSize: 11.5 }}>{a.d}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {auditView.length === 0 && <Empty text="No changes recorded yet — the trail starts with the next edit anyone makes." />}
+        </div>
+      </Card>
+
+      <div style={{ fontSize: 12, color: C.faint, marginTop: 12, maxWidth: 780, lineHeight: 1.6 }}>
+        <AlertTriangle size={12} style={{ verticalAlign: -1, marginRight: 5 }} color={C.amber} />
+        Honest scope: this app runs in the browser against a shared workspace, so these controls govern the app itself — they can't stop someone who holds the Firebase config from reading or writing the data store directly. Keep the app link and config internal, rotate the AI key / Firebase project if they leak, and when you want hard, server-enforced access control the next step is Firebase Authentication with security rules — the schema here maps onto it 1:1.
+      </div>
+    </div>
+  );
+}
+
 /* ================= IMPORT STUDIO (WhatsApp export → dashboard) ================= */
 const CAT_MAP = {
   invoice: "Vendor Contracts", "rate-card": "Legal & Agreements", agreement: "Legal & Agreements",
@@ -2519,13 +2793,19 @@ function Team({ state, setState, user, liveStatus }) {
   const [edit, setEdit] = useState(null);
   const [cfgText, setCfgText] = useState("");
   const canWrite = isOwner(user);
-  const save = () => {
+  const save = async () => {
     const un = (edit.username || "").trim().toLowerCase();
     if (state.users.some((u) => u.id !== edit.id && (u.username || "").toLowerCase() === un)) return alert("That username is already in use.");
     const rec = { ...edit, username: un, id: edit.id || uid() };
+    /* a password typed here is stored only as a salted hash */
+    if ((edit.newPw || "").length >= 4) {
+      const salt = genSalt();
+      rec.pwSalt = salt; rec.pwHash = await hashPassword(edit.newPw, salt); rec.password = "";
+    }
+    delete rec.newPw;
     setState((s) => withLog(
       { ...s, users: edit.id ? s.users.map((u) => (u.id === edit.id ? rec : u)) : [...s.users, rec] },
-      user.name, `${edit.id ? "updated" : "added"} team member ${rec.name}`));
+      user.name, `${edit.id ? "updated" : "added"} team member ${rec.name}${(edit.newPw || "").length >= 4 && edit.id ? " (password reset)" : ""}`));
     setEdit(null);
   };
   const del = (id) => {
@@ -2594,7 +2874,7 @@ function Team({ state, setState, user, liveStatus }) {
     <div>
       <SectionTitle eyebrow="Access control" title="Team & Access" sub="Departments, sub-roles and tiers. Heads run their department; team members work registers; externals (agencies, consultants, brokers) see only their deliverables." />
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
-        <Btn ghost onClick={exportJson}><Download size={14} /> Export all data (JSON)</Btn>
+        {canWrite && <Btn ghost onClick={exportJson}><Download size={14} /> Export all data (JSON)</Btn>}
         {canWrite && <label style={{ display: "inline-flex" }} title="Add new records from a history file without overwriting existing data, the AI key, or live sync.">
           <input type="file" accept="application/json" style={{ display: "none" }} onChange={mergeJson} />
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", background: "transparent", color: C.green, border: `1px solid ${C.green}66`, borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, fontFamily: SANS }}><Plus size={14} /> Merge history file</span>
@@ -2603,7 +2883,7 @@ function Team({ state, setState, user, liveStatus }) {
           <input type="file" accept="application/json" style={{ display: "none" }} onChange={importJson} />
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", background: "transparent", color: C.gold, border: `1px solid ${C.gold}66`, borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, fontFamily: SANS }}><Download size={14} style={{ transform: "rotate(180deg)" }} /> Import JSON (replace)</span>
         </label>}
-        {canWrite && <Btn onClick={() => setEdit({ id: "", name: "", dept: "leasing", subRole: "", tier: "member", username: "", password: "" })}><Plus size={14} /> Add member</Btn>}
+        {canWrite && <Btn onClick={() => setEdit({ id: "", name: "", dept: "leasing", subRole: "", tier: "member", username: "", password: "", newPw: "" })}><Plus size={14} /> Add member</Btn>}
       </div>
       {deptOrder.map((d) => {
         const dUsers = state.users.filter((u) => u.dept === d);
@@ -2620,7 +2900,7 @@ function Team({ state, setState, user, liveStatus }) {
                     <Td style={{ color: C.mute, fontSize: 12 }}>{u.subRole}</Td>
                     <Td><Badge text={TIERS[u.tier]?.label || u.tier} color={TIERS[u.tier]?.color || C.faint} /></Td>
                     <Td style={{ color: C.mute, fontSize: 12 }}>{u.username}</Td>
-                    <Td style={{ color: C.mute }}>{canWrite ? u.password : "••••••"}</Td>
+                    <Td style={{ color: C.mute, fontSize: 12 }}>{canWrite ? (u.password || <span style={{ color: C.green }}>hashed ✓</span>) : "••••••"}{u.locked && <Badge text="locked" color={C.red} />}</Td>
                     {canWrite && <Td right>
                       <Pencil size={14} color={C.mute} style={{ cursor: "pointer", marginRight: 12 }} onClick={() => setEdit({ ...u })} />
                       <Trash2 size={14} color={C.red} style={{ cursor: "pointer" }} onClick={() => del(u.id)} />
@@ -2711,11 +2991,13 @@ function Team({ state, setState, user, liveStatus }) {
               </select>
             </Field>
             <Field label="Username"><Inp value={edit.username} autoCapitalize="none" onChange={(e) => setEdit({ ...edit, username: e.target.value.toLowerCase().replace(/\s+/g, ".") })} placeholder="e.g. leasing.head" /></Field>
-            <Field label="Password (min 4 characters)"><Inp value={edit.password} onChange={(e) => setEdit({ ...edit, password: e.target.value })} /></Field>
+            <Field label={edit.id ? "Reset password (blank = keep current)" : "Password (min 4 characters — longer is safer)"}>
+              <Inp value={edit.newPw || ""} onChange={(e) => setEdit({ ...edit, newPw: e.target.value })} placeholder={edit.id ? "••••••••" : ""} />
+            </Field>
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
             <Btn ghost onClick={() => setEdit(null)}>Cancel</Btn>
-            <Btn onClick={save} disabled={!edit.name || !(edit.username || "").trim() || (edit.password || "").length < 4}>Save member</Btn>
+            <Btn onClick={save} disabled={!edit.name || !(edit.username || "").trim() || (!edit.id && (edit.newPw || "").length < 4) || ((edit.newPw || "").length > 0 && edit.newPw.length < 4)}>Save member</Btn>
           </div>
         </Modal>
       )}
@@ -2821,18 +3103,69 @@ export default function App() {
     return () => clearTimeout(t);
   }, [state]);
 
+  /* Security enforcement: if the Owner force-signs-out this session (kills) or
+     locks the account, this device signs out as soon as the state syncs in. */
+  useEffect(() => {
+    if (!state || !user) return;
+    const sess = loadSession() || {};
+    const killTs = Math.max((state.kills || {})[`${user.id}|${DEVICE_ID}`] || 0, (state.kills || {})[`${user.id}|*`] || 0);
+    const fresh = state.users.find((x) => x.id === user.id);
+    if (!fresh || fresh.locked || (killTs && killTs > (sess.loginTs || 0))) { saveSession(null); setUser(null); }
+  }, [state, user]);
+  /* Session heartbeat: refresh "last seen" every 3 minutes while signed in. */
+  useEffect(() => {
+    if (!user) return;
+    const t = setInterval(() => {
+      setState((s) => {
+        if (!s) return s;
+        const k = `${user.id}|${DEVICE_ID}`;
+        const cur = (s.sessions || {})[k];
+        if (!cur) return s;
+        return { ...s, sessions: { ...s.sessions, [k]: { ...cur, seen: Date.now() } } };
+      });
+    }, 3 * 60000);
+    return () => clearInterval(t);
+  }, [user]);
+
   if (!state) {
     return <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", color: C.mute, fontFamily: SANS, fontSize: 14 }}>Loading TTJ Team OS…</div>;
   }
-  if (!user) return <Login users={state.users} liveOn={liveStatus === "on"} onLogin={(u) => { setUser(u); setPage("overview"); saveSession({ userId: u.id, page: "overview" }); }} />;
+  if (!user) return <Login users={state.users} liveOn={liveStatus === "on"}
+    onAttempt={({ un, ok }) => {
+      setState((s) => ({ ...s, loginEvents: [{ ts: Date.now(), un, ok, uid: null, d: DEVICE_ID, ua: uaInfo() }, ...(s.loginEvents || [])].slice(0, 300) }));
+    }}
+    onLogin={async (u, pw) => {
+      const now = Date.now();
+      /* upgrade a legacy plaintext password to a salted hash on first login */
+      let up = null;
+      if (!u.pwHash && pw) { const salt = genSalt(); up = { pwSalt: salt, pwHash: await hashPassword(pw, salt) }; }
+      setState((s) => ({
+        ...s,
+        users: up ? s.users.map((x) => x.id === u.id ? { ...x, ...up, password: "" } : x) : s.users,
+        loginEvents: [{ ts: now, un: u.username, ok: true, uid: u.id, d: DEVICE_ID, ua: uaInfo() }, ...(s.loginEvents || [])].slice(0, 300),
+        sessions: { ...(s.sessions || {}), [`${u.id}|${DEVICE_ID}`]: { u: u.id, d: DEVICE_ID, ua: uaInfo(), in: now, seen: now } },
+      }));
+      setUser(u); setPage("overview"); saveSession({ userId: u.id, page: "overview", loginTs: now });
+    }} />;
 
   const D = DEPTS[user.dept];
   const myPages = PAGES.filter((p) => pageAllowed(p, user));
   const groups = ["Daily","Workspaces","Property","Records"];
   const cw = (k) => canWritePage(k, user);
   /* Everyone's edits persist; what each person may change is governed by the
-     per-page gates (canWritePage + in-component rules). */
-  const writeState = setState;
+     per-page gates (canWritePage + in-component rules). Every write is passed
+     through the audit differ, so each add/edit/delete is recorded with the
+     actor and device — no page can skip the trail. */
+  const writeState = (updater) => {
+    setState((s) => {
+      const next = typeof updater === "function" ? updater(s) : updater;
+      if (!next || next === s || !user) return next;
+      let entries = auditDiff(s, next, user);
+      if (!entries.length) return next;
+      if (entries.length > 50) entries = [{ ts: Date.now(), by: user.name, byId: user.id, d: DEVICE_ID, col: "bulk", action: "bulk change", name: `${entries.length} records (import / merge / replace)`, fields: "" }];
+      return { ...next, audit: [...entries, ...(next.audit || [])].slice(0, 500) };
+    });
+  };
 
   const Current = {
     overview: <Overview state={state} setState={writeState} user={user} goTo={setPage} />,
@@ -2849,6 +3182,7 @@ export default function App() {
     meetings: <MeetingStudio state={state} setState={writeState} user={user} />,
     constitution: <Constitution state={state} setState={writeState} user={user} />,
     import: <ImportStudio state={state} setState={writeState} user={user} liveStatus={liveStatus} />,
+    security: <SecurityPage state={state} setState={writeState} user={user} liveStatus={liveStatus} />,
     team: <Team state={state} setState={writeState} user={user} liveStatus={liveStatus} />,
   }[page] || <Overview state={state} setState={writeState} user={user} goTo={setPage} />;
 
@@ -2916,7 +3250,10 @@ export default function App() {
               <div style={{ fontSize: 12, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</div>
               <div style={{ fontSize: 9.5, color: C.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.subRole}</div>
             </div>
-            <LogOut size={15} color={C.mute} style={{ cursor: "pointer" }} onClick={() => { saveSession(null); setUser(null); }} title="Sign out" />
+            <LogOut size={15} color={C.mute} style={{ cursor: "pointer" }} onClick={() => {
+              setState((s) => { const k = `${user.id}|${DEVICE_ID}`; if (!s || !(s.sessions || {})[k]) return s; const { [k]: _gone, ...rest } = s.sessions; return { ...s, sessions: rest }; });
+              saveSession(null); setUser(null);
+            }} title="Sign out" />
           </div>
           <div style={{ fontSize: 10, color: saveTick.includes("⚠") ? C.red : C.green, marginTop: 8, height: 12 }}>{saveTick}</div>
         </div>
