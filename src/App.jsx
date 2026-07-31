@@ -296,8 +296,10 @@ async function pushLive(state) {
   catch (e) { console.error("live save failed", e); return false; }
 }
 
-const loadApiKey = () => { if (IS_CLOUD) return ""; try { return localStorage.getItem("kkbp-anthropic-key") || ""; } catch (e) { return ""; } };
-const storeApiKey = (k) => { if (!IS_CLOUD) { try { localStorage.setItem("kkbp-anthropic-key", k); } catch (e) {} } };
+/* One universal AI key for the whole app: set once by the app administrator
+   (Rishi) in Team & Access, stored in app state (never in this public code),
+   synced to every device via the live workspace, and used automatically by
+   Meetings and Import Studio. There is no per-user key. */
 /* Bump this whenever the app should force every device to discard whatever it
    has saved locally / in the shared workspace and boot the clean slate below.
    On load, any state stamped with an older epoch is thrown away and replaced. */
@@ -570,6 +572,42 @@ function Overview({ state, setState, user, goTo }) {
     <div>
       <SectionTitle eyebrow={`${D.label} · ${user.subRole}`} title={`Good day, ${user.name.split(" ")[0]}.`}
         sub={ext ? "Your assigned work, briefs and announcements — everything KKBP needs from you lives here." : "Live position of Karan Kothari Business Park — and everything waiting on you."} accent={D.accent} />
+
+      {isOwner(user) && (() => {
+        /* Owner briefing — the one-glance stop: what needs a decision, and
+           what the team has done lately, in plain lines. */
+        const waiting = isFinApprover(user) ? pendingApprovals : [];
+        const waitingL = waiting.reduce((s, p) => s + (+p.amountL || 0), 0);
+        const recent = (state.audit || []).filter((a) => a.byId !== user.id).slice(0, 7);
+        return (
+          <Card title="At a glance — what's new" style={{ marginBottom: 16, borderColor: `${C.gold}44` }}>
+            {waiting.length > 0 && (
+              <div onClick={() => goTo("approvals")} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: `${C.gold}14`, border: `1px solid ${C.gold}55`, borderRadius: 9, cursor: "pointer", marginBottom: 10 }}>
+                <Stamp size={17} color={C.gold} />
+                <div style={{ flex: 1, fontSize: 13.5, color: C.text }}>
+                  <b>{waiting.length} approval{waiting.length > 1 ? "s" : ""} waiting on you</b>{waitingL ? ` — ${fmtL(waitingL)} total` : ""}. Tap to decide.
+                </div>
+                <ChevronRight size={16} color={C.gold} />
+              </div>
+            )}
+            {isFinApprover(user) && waiting.length === 0 && (
+              <div style={{ fontSize: 12.5, color: C.green, marginBottom: 10 }}><CheckCircle2 size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Nothing is waiting on your approval.</div>
+            )}
+            {recent.length > 0 ? (
+              <div style={{ display: "grid", gap: 6 }}>
+                {recent.map((a, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 12.5, color: C.mute, lineHeight: 1.5 }}>
+                    <span style={{ color: C.faint, fontSize: 11, flexShrink: 0, ...NUM }}>{ago(a.ts)}</span>
+                    <span><b style={{ color: C.text }}>{a.by}</b> {a.action} {a.col === "settings" ? "" : a.col.replace(/s$/, "") + " "}<span style={{ color: C.text }}>“{a.name}”</span></span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12.5, color: C.faint }}>No team activity yet — updates will appear here as the team works.</div>
+            )}
+          </Card>
+        );
+      })()}
 
       {!ext && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
@@ -1869,9 +1907,7 @@ function MeetingStudio({ state, setState, user }) {
   const [transcriptDraft, setTranscriptDraft] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const [aiErr, setAiErr] = useState("");
-  const [apiKey, setApiKey] = useState(loadApiKey());
-  const [needKey, setNeedKey] = useState(false);
-  const effKey = ((state.aiKey || "").trim()) || apiKey;
+  const effKey = (state.aiKey || "").trim(); /* the one team key — no per-user keys */
   const [proposal, setProposal] = useState(null); // {summary,decisions,actions:[{...include:true}],risks,highlights}
 
   const resetRecorder = () => {
@@ -1955,7 +1991,7 @@ function MeetingStudio({ state, setState, user }) {
   };
 
   const runAI = async () => {
-    setAiBusy(true); setAiErr(""); setNeedKey(false);
+    setAiBusy(true); setAiErr("");
     try {
       const roster = state.users;
       const out = await analyzeMeeting(transcriptDraft, roster, { title: meta.title || "KKBP meeting", date: today() }, effKey);
@@ -1974,8 +2010,7 @@ function MeetingStudio({ state, setState, user }) {
     } catch (e) {
       console.error(e);
       if (e.message === "NEED_KEY") {
-        setNeedKey(true);
-        setAiErr("Standalone mode needs an Anthropic API key for the AI analysis (console.anthropic.com → API keys). It's stored only in this browser.");
+        setAiErr("AI isn't available right now — the team key is missing or invalid. Rishi enables it centrally; no key is needed from you.");
       } else {
         setAiErr("AI analysis failed (network or parsing). You can retry, or add action items manually below and publish.");
       }
@@ -2175,16 +2210,13 @@ function MeetingStudio({ state, setState, user }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 14 }}>
         <Card title={`Transcript — ${meta.title || "Untitled"} (${fmtClock(elapsed)})`}>
           <Ta rows={16} value={transcriptDraft} onChange={(e) => setTranscriptDraft(e.target.value)} />
-          {(needKey || (!IS_CLOUD && !effKey)) && (
-            <div style={{ marginTop: 12 }}>
-              <Field label="Anthropic API key (or ask the Owner to set the team key in Team & Access)">
-                <Inp type="password" value={apiKey} placeholder="sk-ant-…"
-                  onChange={(e) => { setApiKey(e.target.value.trim()); storeApiKey(e.target.value.trim()); }} />
-              </Field>
+          {!effKey && (
+            <div style={{ fontSize: 12, color: C.amber, marginTop: 12, lineHeight: 1.5 }}>
+              AI analysis isn't enabled yet — Rishi switches it on centrally for the whole team. You can still edit the transcript and publish the MOM with manual action items.
             </div>
           )}
           <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
-            <Btn onClick={runAI} disabled={aiBusy || !transcriptDraft.trim()}>
+            <Btn onClick={runAI} disabled={aiBusy || !transcriptDraft.trim() || !effKey}>
               {aiBusy ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />} {aiBusy ? "Analyzing…" : proposal ? "Re-analyze" : "Analyze with AI"}
             </Btn>
             <Btn ghost onClick={() => setView("record")}>Back to recorder</Btn>
@@ -2927,7 +2959,7 @@ function Team({ state, setState, user, liveStatus }) {
         <Card title="AI Notetaker — Claude API key" style={{ marginBottom: 12, maxWidth: 760 }}>
           <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.65 }}>
             Status:{" "}
-            <Badge text={(state.aiKey || "").trim() ? "Key set — AI meeting analysis works for the whole team" : "No key — each person must enter their own on the AI review screen"} color={(state.aiKey || "").trim() ? C.green : C.amber} />
+            <Badge text={(state.aiKey || "").trim() ? "Universal key set — AI works for the whole team automatically" : "No key yet — AI features are off for everyone until you set it"} color={(state.aiKey || "").trim() ? C.green : C.amber} />
           </div>
           <div style={{ marginTop: 10 }}>
             <Field label="Anthropic API key (console.anthropic.com → API keys)">
@@ -2936,7 +2968,7 @@ function Team({ state, setState, user, liveStatus }) {
             </Field>
           </div>
           <div style={{ fontSize: 11.5, color: C.faint, marginTop: 10, lineHeight: 1.6 }}>
-            Stored inside the app's data (and synced to every device through the live shared workspace) — never in the public code. Anyone with access to this app can use it for meeting analysis, so treat it like a shared office key: keep the app link internal, and rotate the key at console.anthropic.com if it leaks.
+            The one key for the entire app — you set it here once, it syncs to every device through the live workspace, and Meetings + Import Studio use it automatically for everyone. Nobody else can see this page or change the key. It lives in the app's data, never in the public code (a key committed to the code would be readable by the whole internet and disabled by Anthropic within hours). Rotate it at console.anthropic.com if it ever leaks.
           </div>
         </Card>
       )}
