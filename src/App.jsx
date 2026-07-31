@@ -42,8 +42,10 @@ const TIERS = {
   external: { label: "External / Agency", color: C.purple },
 };
 const isExec = (u) => u.dept === "exec";
-const isOwner = (u) => u.exec === "owner";
-const isCEO = (u) => u.exec === "ceo";
+const isOwner = (u) => u.exec === "owner";           /* Nitin (final say), Rishi, Arjun */
+const isCEO = (u) => u.exec === "ceo";               /* Manoj — external consultant */
+const isFinApprover = (u) => !!u && !!u.finApprover; /* every financial approval, any amount: Rishi or Nitin only */
+const isAppAdmin = (u) => !!u && !!u.appAdmin;       /* app administration (settings, security, imports): Rishi */
 const isHead = (u) => u.tier === "head";
 const isExternal = (u) => u.tier === "external";
 /* Write-access model: the Owner edits everything; internal members edit within
@@ -69,9 +71,10 @@ const PAGES = [
   { key: "security",     label: "Security",           icon: ShieldCheck,     group: "Records", owner: true },
   { key: "team",         label: "Team & Access",      icon: Users,           group: "Records", owner: true },
 ];
-/* `owner: true` pages (settings — team, API key, live workspace, import/export)
-   are visible only to the Owner. Other pages follow the department gate. */
-const pageAllowed = (p, u) => (!p.owner || isOwner(u)) && (!p.depts || p.depts.includes(u.dept));
+/* `owner: true` pages (settings — team, API key, live workspace, security,
+   import) are visible only to the app administrator (Rishi). Other pages
+   follow the department gate. */
+const pageAllowed = (p, u) => (!p.owner || isAppAdmin(u)) && (!p.depts || p.depts.includes(u.dept));
 
 /* Registers each dept can WRITE. Externals never write registers (they act on tasks/content assigned to them). */
 const WRITE_DEPT = {
@@ -88,10 +91,10 @@ const canWritePage = (key, u) => {
 const CMA_TARGET_L = 541;
 
 const SEED_USERS = [
-  { id:"u1", name:"Rishi Kothari", dept:"exec", subRole:"Owner / Promoter \u00b7 IT & Digital (Director, rishi@kkjpl.com)", tier:"head", exec:"owner", username:"rishi", password:"7001" },
-  { id:"u2", name:"Nitin Kothari", dept:"exec", subRole:"Managing Director \u00b7 Final authority on layouts, anchors & name (nitin@kkjpl.com)", tier:"head", exec:"ceo", username:"nitin", password:"7002" },
-  { id:"u3", name:"Arjun Kothari", dept:"exec", subRole:"Promoter \u00b7 Brand & PR direction", tier:"head", username:"arjun", password:"7003" },
-  { id:"u4", name:"Manoj Agarwal", dept:"exec", subRole:"Project Director \u2014 MKA \u00b7 Runs weekly cadence, CAM & sign-offs", tier:"head", username:"manoj", password:"7004" },
+  { id:"u1", name:"Rishi Kothari", dept:"exec", subRole:"Owner / Promoter \u00b7 Oversees everything day-to-day \u00b7 IT & Digital (rishi@kkjpl.com)", tier:"head", exec:"owner", finApprover:true, appAdmin:true, username:"rishi", password:"7001" },
+  { id:"u2", name:"Nitin Kothari", dept:"exec", subRole:"Owner & Managing Director \u00b7 Final authority on every decision (nitin@kkjpl.com)", tier:"head", exec:"owner", finApprover:true, username:"nitin", password:"7002" },
+  { id:"u3", name:"Arjun Kothari", dept:"exec", subRole:"Owner / Promoter \u00b7 Brand & PR direction", tier:"head", exec:"owner", username:"arjun", password:"7003" },
+  { id:"u4", name:"Manoj Agarwal", dept:"exec", subRole:"CEO \u2014 External consultant (MKA) \u00b7 Runs weekly cadence, CAM & sign-offs", tier:"head", exec:"ceo", username:"manoj", password:"7004" },
   { id:"u5", name:"Sushil Ahuja", dept:"leasing", subRole:"Head of Leasing \u00b7 Consultant, Delhi (dedicated to TTJ since 1 Jun)", tier:"head", username:"sushil", password:"7005" },
   { id:"u6", name:"Rateesh", dept:"leasing", subRole:"Leasing Consultant \u2014 Chennai \u00b7 South-India brand pipeline", tier:"external", username:"rateesh", password:"7006" },
   { id:"u7", name:"Basha", dept:"leasing", subRole:"Leasing Coordinator \u2014 Nagpur \u00b7 On-ground client visits", tier:"member", username:"basha", password:"7007" },
@@ -157,8 +160,8 @@ const SEED_DOCS = [];
 const CONSTITUTION = [
   { id: "S1", title: "1. Purpose", body: "Karan Kothari Business Park (KKBP) exists to build North Nagpur's defining commercial destination while protecting the Karan Kothari Group's capital, credit standing and four-decade reputation. Every decision is tested against three questions: does it serve the customer, does it protect DSCR, and would we be comfortable explaining it to our bankers." },
   { id: "S2", title: "2. Values", body: "Integrity before opportunity — no commitment we cannot honour. Speed with documentation — move fast, but every deal, change order and approval leaves a paper trail in this system. Tenant success is our revenue — a majority of our income is revenue-share; we win when tenants trade well. One team — leasing, marketing, projects, admin and design share one dashboard and one truth." },
-  { id: "S3", title: "3. Role charters", body: "OWNER: capital allocation, banking relationships, final authority on anchor deals and capex above delegation limits. CEO: runs the operating cadence, owns the P&L vs CMA plan, arbitrates cross-functional conflicts. LEASING HEAD: owns the rent roll — pipeline, LOIs, agreements, escalations; the team (executives, channel partners) feeds the pipeline but only the Head commits terms. MARKETING HEAD: owns footfall and the launch calendar; directs the in-house content team, interns, and agency partners (INIT Design Studio for brand/creative, OCDS Design Studio for digital media) through the Content Studio; agencies deliver, the Head approves. ADMIN HEAD: owns statutory compliance, licences, insurance, vendors/AMCs and operations readiness. PROJECT HEAD: owns capex budget vs actual, works schedule and handover dates; no scope change without a change-order approval. PRINCIPAL ARCHITECT: owns drawing integrity — GFC discipline, design intent through fit-out; MEP and structural consultants answer RFIs inside 5 working days." },
-  { id: "S4", title: "4. Delegation of Authority", body: "Spend approvals — up to ₹5L: department head. ₹5L–₹25L: CEO. Above ₹25L or any anchor lease/rate deviation: Owner. Lease approvals — vanilla retail at rack rate: Leasing Head. Any deviation from rate card, rent-free beyond 60 days, or anchor terms: CEO + Owner. All requests are raised on the Approvals page and decided there — a verbal yes is not an approval." },
+  { id: "S3", title: "3. Role charters", body: "OWNERS — Nitin Kothari (Managing Director; final authority on every decision), Rishi Kothari (oversees everything day-to-day; administers this system) and Arjun Kothari (brand & PR direction): capital allocation, banking relationships, final word on anchor deals and all spend. CEO — Manoj Agarwal (external consultant, MKA): runs the operating cadence, weekly reviews, CAM and site sign-offs; prepares and escalates every financial decision to the Owners. LEASING HEAD: owns the rent roll — pipeline, LOIs, agreements, escalations; the team (executives, channel partners) feeds the pipeline but only the Head commits terms. MARKETING HEAD: owns footfall and the launch calendar; directs the in-house content team, interns, and agency partners (INIT Design Studio for brand/creative, OCDS Design Studio for digital media) through the Content Studio; agencies deliver, the Head approves. ADMIN HEAD: owns statutory compliance, licences, insurance, vendors/AMCs and operations readiness. PROJECT HEAD: owns capex budget vs actual, works schedule and handover dates; no scope change without a change-order approval. PRINCIPAL ARCHITECT: owns drawing integrity — GFC discipline, design intent through fit-out; MEP and structural consultants answer RFIs inside 5 working days." },
+  { id: "S4", title: "4. Delegation of Authority", body: "Financial approvals — every request for money, of any size or type (capex, purchases, campaign and admin spend, vendor contracts, design change orders, lease deviations), is decided only by Rishi Kothari or Nitin Kothari on the Approvals page. Department heads and the CEO prepare and raise requests with full context; nothing is committed before the approval is recorded. Lease terms — vanilla retail at rack rate is negotiated by the Leasing Head, but every deal and any deviation (rate card, rent-free, anchor terms) is ratified by Rishi or Nitin before signature. A verbal yes is not an approval." },
   { id: "S5", title: "5. Operating cadence", body: "Monday 10:00 — leadership stand-up (30 min, this dashboard on screen). Thursday — leasing pipeline review. Month-end — capex vs budget and compliance review with CEO. Every review works off this system; if it is not in the dashboard, it did not happen." },
   { id: "S6", title: "6. The official channel", body: "This system is the single source of truth. Work is assigned as Tasks, money is requested as Approvals, creative moves through the Content Studio, decisions are minuted in Meetings & MOMs, and files are indexed in Documents. External partners — agencies, consultants, channel partners — work inside their department workspace with access limited to their deliverables. Chat apps may carry alerts; they carry no authority." },
   { id: "S7", title: "7. Data, confidentiality & conduct", body: "Rent rolls, deal terms, CMA financials and capex data are strictly confidential. External partners see only what their scope requires. No screenshots or exports shared outside without Owner/CEO consent. Vendor gifts above token value are declared to Admin Head. Conflicts of interest are disclosed in writing." },
@@ -206,10 +209,28 @@ const loadSession = () => { try { return JSON.parse(sessionStorage.getItem(SESS_
 const saveSession = (s) => { try { if (s) sessionStorage.setItem(SESS_KEY, JSON.stringify(s)); else sessionStorage.removeItem(SESS_KEY); } catch (e) {} };
 /* Old saved states used a 4-digit PIN and no username — upgrade them in place. */
 const slugUser = (name) => (name || "user").toLowerCase().replace(/[^a-z0-9]+/g, ".").replace(/(^\.)|(\.$)/g, "");
-const migrateState = (st) => ({
-  ...st,
-  users: (st.users || []).map((u) => ({ ...u, username: u.username || slugUser(u.name), password: u.pwHash ? "" : (u.password || u.pin || "0000") })),
-});
+const migrateState = (st) => {
+  const out = {
+    ...st,
+    users: (st.users || []).map((u) => ({ ...u, username: u.username || slugUser(u.name), password: u.pwHash ? "" : (u.password || u.pin || "0000") })),
+  };
+  /* v3 org structure: Nitin & Arjun join Rishi as Owners (Nitin final say),
+     Manoj is CEO as an external consultant, all financial approvals of any
+     size go to Rishi or Nitin, app administration stays with Rishi. Patches
+     already-saved workspaces in place — no data reset needed. */
+  if ((out.roleVersion || 0) < 3) {
+    const patch = {
+      rishi: { exec: "owner", finApprover: true, appAdmin: true, subRole: "Owner / Promoter · Oversees everything day-to-day · IT & Digital (rishi@kkjpl.com)" },
+      nitin: { exec: "owner", finApprover: true, appAdmin: false, subRole: "Owner & Managing Director · Final authority on every decision (nitin@kkjpl.com)" },
+      arjun: { exec: "owner", finApprover: false, appAdmin: false, subRole: "Owner / Promoter · Brand & PR direction" },
+      manoj: { exec: "ceo", finApprover: false, appAdmin: false, subRole: "CEO — External consultant (MKA) · Runs weekly cadence, CAM & sign-offs" },
+    };
+    out.users = out.users.map((u) => patch[u.username] ? { ...u, ...patch[u.username] } : u);
+    out.roleVersion = 3;
+    out.constitutionVersion = Math.max(out.constitutionVersion || 2, 3); /* §3–4 changed → re-acknowledge */
+  }
+  return out;
+};
 
 /* ================= LIVE SYNC (shared workspace via Firebase Firestore) =================
    When the Owner pastes a Firebase config in Team & Access, every device reads and
@@ -290,7 +311,10 @@ const freshState = () => ({
   meetings: SEED_MEETINGS, docs: SEED_DOCS,
   aiKey: "",
   log: [{ ts: Date.now(), by: "System", text: "TTJ Team OS initialised — clean workspace, official channel live." }],
-  acks: {}, constitutionVersion: 2, dataEpoch: DATA_EPOCH,
+  /* roleVersion is intentionally absent here: migrateState stamps it, and a
+     saved workspace merged over freshState must not inherit it (that would
+     silently skip the role migration). */
+  acks: {}, constitutionVersion: 3, dataEpoch: DATA_EPOCH,
   /* security registers */
   audit: [],       /* every add/edit/delete: {ts, by, byId, d(evice), col, action, name, fields} */
   loginEvents: [], /* {ts, un, ok, uid, d, ua} — successes and failures */
@@ -736,25 +760,12 @@ function Tasks({ state, setState, user }) {
 }
 
 /* ================= APPROVALS ================= */
-const requiredApprover = (p) => {
-  if (p.type === "Lease deviation") return { text: "CEO + Owner", color: C.gold };
-  const a = +p.amountL || 0;
-  if (a > 25) return { text: "Owner", color: C.gold };
-  if (a > 5) return { text: "CEO", color: C.purple };
-  return { text: "Dept Head", color: C.blue };
-};
+const requiredApprover = () => ({ text: "Rishi / Nitin", color: C.gold });
 function Approvals({ state, setState, user }) {
   const [edit, setEdit] = useState(null);
-  /* Delegation of Authority (§4): head ≤ ₹5L in own dept, CEO ≤ ₹25L,
-     Owner everything; lease deviations are Owner-only. */
-  const canDecide = (p) => {
-    if (p.status !== "Pending") return false;
-    if (isOwner(user)) return true;
-    if (p.type === "Lease deviation") return false;
-    const a = +p.amountL || 0;
-    if (isCEO(user)) return a <= 25;
-    return isHead(user) && user.dept === p.dept && a <= 5;
-  };
+  /* Every financial approval — any amount, any type — is decided only by
+     Rishi or Nitin (§4). Heads raise and prepare; they do not clear money. */
+  const canDecide = (p) => p.status === "Pending" && isFinApprover(user);
   const decide = (p, status) => setState((s) => withLog(
     { ...s, approvals: s.approvals.map((x) => (x.id === p.id ? { ...x, status, decidedById: user.id, dateDecided: today() } : x)) },
     user.name, `${status.toLowerCase()} “${p.title}”${p.amountL ? ` (${fmtL(p.amountL)})` : ""}`));
@@ -766,7 +777,7 @@ function Approvals({ state, setState, user }) {
   const groups = [["Pending", state.approvals.filter((p) => p.status === "Pending")], ["Decided", state.approvals.filter((p) => p.status !== "Pending")]];
   return (
     <div>
-      <SectionTitle eyebrow="Daily" title="Approvals" sub="Money and deviations move only through this page, routed per the Delegation of Authority (§4). A verbal yes is not an approval." />
+      <SectionTitle eyebrow="Daily" title="Approvals" sub="Money and deviations move only through this page. Every request — any amount, any type — is decided by Rishi or Nitin (§4). A verbal yes is not an approval." />
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
         <Btn onClick={() => setEdit({ title: "", type: APPROVAL_TYPES[0], amountL: 0, dept: isExec(user) ? "project" : user.dept, notes: "" })}><Send size={14} /> Raise request</Btn>
       </div>
@@ -2792,7 +2803,7 @@ function ImportStudio({ state, setState, user, liveStatus }) {
 function Team({ state, setState, user, liveStatus }) {
   const [edit, setEdit] = useState(null);
   const [cfgText, setCfgText] = useState("");
-  const canWrite = isOwner(user);
+  const canWrite = isAppAdmin(user);
   const save = async () => {
     const un = (edit.username || "").trim().toLowerCase();
     if (state.users.some((u) => u.id !== edit.id && (u.username || "").toLowerCase() === un)) return alert("That username is already in use.");
