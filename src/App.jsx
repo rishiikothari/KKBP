@@ -312,6 +312,7 @@ const freshState = () => ({
   tasks: SEED_TASKS, approvals: SEED_APPROVALS, announcements: SEED_ANNOUNCEMENTS,
   meetings: SEED_MEETINGS, docs: SEED_DOCS,
   aiKey: "",
+  roiCfg: { ...ROI_DEFAULTS },
   log: [{ ts: Date.now(), by: "System", text: "TTJ Team OS initialised — clean workspace, official channel live." }],
   /* roleVersion is intentionally absent here: migrateState stamps it, and a
      saved workspace merged over freshState must not inherit it (that would
@@ -358,6 +359,7 @@ function auditDiff(prev, next, actor) {
     for (const [id, r] of aById) if (!bById.has(id)) out.push({ ts, by: actor.name, byId: actor.id, d: DEVICE_ID, col, action: "deleted", name: nameOf(r) || id, fields: "" });
   }
   if ((prev.aiKey || "") !== (next.aiKey || "")) out.push({ ts, by: actor.name, byId: actor.id, d: DEVICE_ID, col: "settings", action: "updated", name: "AI key", fields: "" });
+  if (JSON.stringify(prev.roiCfg || null) !== JSON.stringify(next.roiCfg || null)) out.push({ ts, by: actor.name, byId: actor.id, d: DEVICE_ID, col: "settings", action: "updated", name: "Deal ROI assumptions", fields: "" });
   return out;
 }
 
@@ -371,6 +373,43 @@ function tenantMonthlyL(t) {
   if (t.deal === "Self-Operated") return +t.salesL || 0;
   return 0;
 }
+/* ---------- Leasing deal ROI (mirrors the KKBP Leasing ROI Calculator xlsx) ----------
+   Rent each year = HIGHER of the revenue-share leg and the base/minimum leg; the base
+   leg escalates annually, the sales leg grows annually. Capex is screened against the
+   first 36 months of rent, net of the rent-free period and a collection haircut.
+   ROI is quoted on rent-above-base (the sheet's primary screen) and on total rent. */
+const ROI_DEFAULTS = { escPct: 5, growPct: 8, rentFreeM: 3, collPct: 100, targetPaybackM: 36, targetRoiPct: 30 };
+function tenantRoi(t, cfg) {
+  const c = { ...ROI_DEFAULTS, ...(cfg || {}) };
+  const area = +t.area || 0;
+  const esc = 1 + (+c.escPct || 0) / 100, grow = 1 + (+c.growPct || 0) / 100;
+  const coll = (+c.collPct || 0) / 100;
+  const rentFree = Math.max(0, Math.min(11, +c.rentFreeM || 0));
+  const legs = (yr) => { /* monthly ₹ legs in year yr (1-based) */
+    const e = Math.pow(esc, yr - 1), g = Math.pow(grow, yr - 1);
+    let base = 0, vari = 0;
+    if (t.deal === "Pure Rent") base = area * (+t.rent || 0) * e;
+    else if (t.deal === "Rev Share (area)") vari = area * (+t.density || 0) * g * ((+t.share || 0) / 100);
+    else if (t.deal === "MRG + Rev Share") { base = area * (+t.mrg || 0) * e; vari = area * (+t.density || 0) * g * ((+t.share || 0) / 100); }
+    else if (t.deal === "Rev Share (turnover)") vari = (+t.salesL || 0) * 1e5 * g * ((+t.share || 0) / 100);
+    else if (t.deal === "Self-Operated") vari = (+t.salesL || 0) * 1e5 * g;
+    return { base, rent: Math.max(base, vari) };
+  };
+  const y = [1, 2, 3].map(legs);
+  const rent36 = (y[0].rent * (12 - rentFree) + y[1].rent * 12 + y[2].rent * 12) * coll;
+  const base36 = (y[0].base * (12 - rentFree) + y[1].base * 12 + y[2].base * 12) * coll;
+  const above36 = rent36 - base36;
+  const capex = area * (+t.capexPsf || 0);
+  const perMoAbove = above36 / 36, perMoTotal = rent36 / 36;
+  const paybackAbove = capex > 0 ? (perMoAbove > 0 ? capex / perMoAbove : Infinity) : 0;
+  const paybackTotal = capex > 0 ? (perMoTotal > 0 ? capex / perMoTotal : Infinity) : 0;
+  const roiAbove = capex > 0 ? (perMoAbove * 12) / capex : 0;
+  const roiTotal = capex > 0 ? (perMoTotal * 12) / capex : 0;
+  const verdict = capex <= 0 ? "n/a"
+    : (isFinite(paybackAbove) && paybackAbove <= (+c.targetPaybackM || 36) && roiAbove >= (+c.targetRoiPct || 0) / 100) ? "PASS" : "REVIEW";
+  return { capex, rentMo1: y[0].rent, aboveMo1: y[0].rent - y[0].base, rent36, above36, paybackAbove, paybackTotal, roiAbove, roiTotal, verdict };
+}
+
 const fmtL = (v) => `₹${(+v || 0).toLocaleString("en-IN", { maximumFractionDigits: 1 })}L`;
 const fmtCr = (vL) => `₹${((+vL || 0) / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })} Cr`;
 const fmtSft = (v) => `${(+v || 0).toLocaleString("en-IN")} sft`;
@@ -936,13 +975,16 @@ function Announcements({ state, setState, user }) {
   );
 }
 /* ================= TENANTS ================= */
-const blankTenant = () => ({ id: "", name: "", category: "Vanilla Retail", area: 0, deal: "Pure Rent", rent: 0, density: 0, share: 0, mrg: 0, salesL: 0, status: "Lead", floor: "Ground", poc: "", notes: "" });
+const blankTenant = () => ({ id: "", name: "", category: "Vanilla Retail", area: 0, deal: "Pure Rent", rent: 0, density: 0, share: 0, mrg: 0, salesL: 0, capexPsf: 0, status: "Lead", floor: "Ground", poc: "", notes: "" });
 
 function Tenants({ state, setState, canWrite }) {
   const [edit, setEdit] = useState(null);
   const [filterCat, setFilterCat] = useState("All");
   const [filterSt, setFilterSt] = useState("All");
   const [q, setQ] = useState("");
+  const [tab, setTab] = useState("roll"); // roll | roi
+  const roiCfg = { ...ROI_DEFAULTS, ...(state.roiCfg || {}) };
+  const setCfg = (k, v) => setState((s) => ({ ...s, roiCfg: { ...ROI_DEFAULTS, ...(s.roiCfg || {}), [k]: +v || 0 } }));
   const list = state.tenants.filter((t) =>
     (filterCat === "All" || t.category === filterCat) &&
     (filterSt === "All" || t.status === filterSt) &&
@@ -971,14 +1013,86 @@ function Tenants({ state, setState, canWrite }) {
         {canWrite && <Btn onClick={() => setEdit(blankTenant())}><Plus size={14} /> Add tenant</Btn>}
       </div>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12, alignItems: "center" }}>
+        {[["roll", "Rent Roll"], ["roi", "Deal ROI — capex screen"]].map(([k, l]) => (
+          <button key={k} onClick={() => setTab(k)} style={{ background: tab === k ? C.panel2 : "transparent", color: tab === k ? C.text : C.mute, border: `1px solid ${tab === k ? C.gold : C.line}`, borderRadius: 8, padding: "7px 14px", fontSize: 13, cursor: "pointer", fontFamily: SANS }}>{l}</button>
+        ))}
+        <div style={{ flex: 1 }} />
         {TSTATUS.map((st) => {
           const n = state.tenants.filter((t) => t.status === st).length;
           return <Badge key={st} text={`${st}: ${n}`} color={TSTATUS_COLOR[st]} />;
         })}
       </div>
 
-      <Card pad={0}>
+      {tab === "roi" && (() => {
+        const rows = list.map((t) => ({ t, r: tenantRoi(t, roiCfg) }));
+        const withCapex = rows.filter((x) => x.r.capex > 0);
+        const totCapex = rows.reduce((s, x) => s + x.r.capex, 0);
+        const totArea = rows.reduce((s, x) => s + (x.r.capex > 0 ? (+x.t.area || 0) : 0), 0);
+        const totRent36 = withCapex.reduce((s, x) => s + x.r.rent36, 0);
+        const totAbove36 = withCapex.reduce((s, x) => s + x.r.above36, 0);
+        const pfPayback = totAbove36 > 0 ? totCapex / (totAbove36 / 36) : Infinity;
+        const pfRoi = totCapex > 0 ? (totAbove36 / 36 * 12) / totCapex : 0;
+        const passN = withCapex.filter((x) => x.r.verdict === "PASS").length;
+        const mo = (v) => v === 0 ? "—" : !isFinite(v) ? "No payback" : v.toFixed(1);
+        const pc = (v) => v ? `${(v * 100).toFixed(0)}%` : "—";
+        const VC = { PASS: C.green, REVIEW: C.amber, "n/a": C.faint };
+        return (
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 12 }}>
+              <KPI label="Landlord capex committed" value={fmtCr(totCapex / 1e5)} sub={`${withCapex.length} deal${withCapex.length === 1 ? "" : "s"} with capex`} tone={C.amber} />
+              <KPI label="Blended capex / sft" value={totArea ? `₹${Math.round(totCapex / totArea).toLocaleString("en-IN")}` : "—"} sub="on capex deals" tone={C.blue} />
+              <KPI label="Portfolio payback" value={isFinite(pfPayback) && totCapex ? `${pfPayback.toFixed(1)} mo` : "—"} sub="on rent above base" tone={pfPayback <= roiCfg.targetPaybackM ? C.green : C.red} />
+              <KPI label="Portfolio ROI p.a." value={pc(pfRoi)} sub="rent above base / capex" tone={pfRoi >= roiCfg.targetRoiPct / 100 ? C.green : C.red} />
+              <KPI label="Deals clearing screen" value={`${passN}/${withCapex.length}`} sub={`payback ≤ ${roiCfg.targetPaybackM}m & ROI ≥ ${roiCfg.targetRoiPct}%`} tone={passN === withCapex.length && withCapex.length ? C.green : C.purple} />
+            </div>
+            <Card title="Assumptions (portfolio-wide)" style={{ marginBottom: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+                {[["escPct", "Base escalation (% p.a.)"], ["growPct", "Trade density growth (% p.a.)"], ["rentFreeM", "Rent-free period (months)"], ["collPct", "Collection efficiency (%)"], ["targetPaybackM", "Target payback (months)"], ["targetRoiPct", "Target ROI (% p.a.)"]].map(([k, l]) => (
+                  <Field key={k} label={l}>
+                    {canWrite ? <Inp type="number" value={roiCfg[k]} onChange={(e) => setCfg(k, e.target.value)} />
+                      : <div style={{ fontSize: 14, color: C.text, padding: "9px 0", ...NUM }}>{roiCfg[k]}</div>}
+                  </Field>
+                ))}
+              </div>
+              <div style={{ fontSize: 11.5, color: C.faint, marginTop: 10, lineHeight: 1.6 }}>
+                Screened over the first 36 months, matching the leasing ROI workbook: rent each year is the higher of the revenue-share and base legs; the base escalates, trade density grows; the rent-free months are deducted from year 1. A deal PASSES when capex is recovered from rent above base within the target payback and the annual ROI clears the target.
+              </div>
+            </Card>
+            <Card pad={0}>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1150 }}>
+                  <thead><tr>
+                    <Th>Tenant</Th><Th right>Area</Th><Th right>Capex ₹/sft</Th><Th right>Total capex</Th><Th right>Rent /mo (Y1)</Th><Th right>Above base /mo</Th><Th right>Rent 36M</Th><Th right>Above base 36M</Th><Th right>Payback (above)</Th><Th right>Payback (total)</Th><Th right>ROI% (above)</Th><Th right>ROI% (total)</Th><Th>Screen</Th>
+                  </tr></thead>
+                  <tbody>
+                    {rows.map(({ t, r }) => (
+                      <tr key={t.id} style={{ opacity: r.capex > 0 ? 1 : 0.55 }}>
+                        <Td><div style={{ fontWeight: 600 }}>{t.name}</div><div style={{ fontSize: 11, color: C.faint }}>{t.deal}</div></Td>
+                        <Td right>{t.area ? fmtSft(t.area) : "—"}</Td>
+                        <Td right>{+t.capexPsf ? `₹${(+t.capexPsf).toLocaleString("en-IN")}` : "—"}</Td>
+                        <Td right style={{ color: C.amber }}>{r.capex ? fmtL(r.capex / 1e5) : "—"}</Td>
+                        <Td right>{fmtL(r.rentMo1 / 1e5)}</Td>
+                        <Td right style={{ color: C.teal }}>{fmtL(r.aboveMo1 / 1e5)}</Td>
+                        <Td right>{fmtL(r.rent36 / 1e5)}</Td>
+                        <Td right style={{ color: C.teal }}>{fmtL(r.above36 / 1e5)}</Td>
+                        <Td right style={{ fontWeight: 600, color: r.capex ? (isFinite(r.paybackAbove) && r.paybackAbove <= roiCfg.targetPaybackM ? C.green : C.red) : C.faint }}>{mo(r.paybackAbove)}</Td>
+                        <Td right>{mo(r.paybackTotal)}</Td>
+                        <Td right style={{ fontWeight: 600, color: r.capex ? (r.roiAbove >= roiCfg.targetRoiPct / 100 ? C.green : C.red) : C.faint }}>{r.capex ? pc(r.roiAbove) : "—"}</Td>
+                        <Td right>{r.capex ? pc(r.roiTotal) : "—"}</Td>
+                        <Td><Badge text={r.verdict} color={VC[r.verdict]} /></Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {rows.length === 0 && <Empty text="No tenants match these filters — add deals on the Rent Roll tab, with landlord capex where the brand demands it." />}
+              </div>
+            </Card>
+          </div>
+        );
+      })()}
+
+      {tab === "roll" && <Card pad={0}>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 860 }}>
             <thead><tr>
@@ -1004,7 +1118,7 @@ function Tenants({ state, setState, canWrite }) {
           </table>
           {list.length === 0 && <Empty text="No tenants match these filters. Add your first tenant to build the rent roll." />}
         </div>
-      </Card>
+      </Card>}
 
       {edit && (
         <Modal title={edit.id ? `Edit — ${edit.name}` : "Add tenant"} onClose={() => setEdit(null)} wide>
@@ -1026,11 +1140,18 @@ function Tenants({ state, setState, canWrite }) {
               <Field label="Revenue share %"><Inp type="number" value={edit.share} onChange={(e) => setEdit({ ...edit, share: e.target.value })} /></Field>
             </>}
             {edit.deal === "Self-Operated" && <Field label="Net contribution (₹L/mo)"><Inp type="number" value={edit.salesL} onChange={(e) => setEdit({ ...edit, salesL: e.target.value })} /></Field>}
+            <Field label="Landlord capex (₹/sft) — if the brand requires fit-out contribution"><Inp type="number" value={edit.capexPsf || ""} onChange={(e) => setEdit({ ...edit, capexPsf: e.target.value })} placeholder="0 = no capex" /></Field>
             <Field label="Point of contact"><Inp value={edit.poc} onChange={(e) => setEdit({ ...edit, poc: e.target.value })} /></Field>
           </div>
           <div style={{ marginTop: 12 }}><Field label="Notes"><Ta value={edit.notes} onChange={(e) => setEdit({ ...edit, notes: e.target.value })} /></Field></div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
-            <div style={{ fontSize: 13, color: C.mute }}>Computed income: <span style={{ color: C.gold, ...NUM }}>{fmtL(tenantMonthlyL(edit))}/mo</span></div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, flexWrap: "wrap", gap: 8 }}>
+            <div style={{ fontSize: 13, color: C.mute }}>
+              Income: <span style={{ color: C.gold, ...NUM }}>{fmtL(tenantMonthlyL(edit))}/mo</span>
+              {+edit.capexPsf > 0 && +edit.area > 0 && (() => {
+                const r = tenantRoi(edit, roiCfg);
+                return <> · Capex: <span style={{ color: C.amber, ...NUM }}>{fmtL(r.capex / 1e5)}</span> · Payback: <span style={{ color: isFinite(r.paybackAbove) && r.paybackAbove <= roiCfg.targetPaybackM ? C.green : C.red, ...NUM }}>{isFinite(r.paybackAbove) ? r.paybackAbove.toFixed(1) + " mo" : "no payback"}</span> · <Badge text={r.verdict} color={r.verdict === "PASS" ? C.green : C.amber} /></>;
+              })()}
+            </div>
             <div style={{ display: "flex", gap: 8 }}>
               <Btn ghost onClick={() => setEdit(null)}>Cancel</Btn>
               <Btn onClick={save} disabled={!edit.name}>Save tenant</Btn>
