@@ -14,15 +14,17 @@ import {
 } from "recharts";
 
 /* ================= THEME ================= */
+/* The Town Junction brand (per the TTJ investment deck): deep midnight navy
+   ground, warm cream type, amber-orange accent, high-contrast serif headlines. */
 const C = {
-  bg: "#0C1016", panel: "#151C25", panel2: "#1B242F", panel3: "#10161E",
-  line: "#26303C", lineSoft: "#1E2833",
-  gold: "#D8A94B", goldDim: "#94743A",
-  text: "#EDEAE2", mute: "#8C96A3", faint: "#5E6874",
-  green: "#63B78C", amber: "#E0A23C", red: "#DA6E5C", blue: "#7FA9C9",
-  purple: "#A98FD0", teal: "#6BB8B0", rose: "#C9808F",
+  bg: "#13132E", panel: "#1B1B3F", panel2: "#232350", panel3: "#171736",
+  line: "#2F2F5E", lineSoft: "#26264C",
+  gold: "#EC9744", goldDim: "#A86F2E",
+  text: "#F5EFE2", mute: "#A9A6C6", faint: "#6E6C94",
+  green: "#6BBF95", amber: "#E2A54B", red: "#E07862", blue: "#8AA9DB",
+  purple: "#A995DD", teal: "#6FC0BC", rose: "#D08A9B",
 };
-const SERIF = "Georgia, 'Times New Roman', serif";
+const SERIF = "'Playfair Display', Georgia, 'Times New Roman', serif";
 const SANS = "-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 const NUM = { fontVariantNumeric: "tabular-nums" };
 
@@ -457,7 +459,7 @@ const Bar_ = ({ pct, tone }) => (
 const Btn = ({ children, onClick, tone, ghost, small, disabled }) => (
   <button onClick={onClick} disabled={disabled} style={{
     display: "inline-flex", alignItems: "center", gap: 6, cursor: disabled ? "not-allowed" : "pointer",
-    background: ghost ? "transparent" : (tone || C.gold), color: ghost ? (tone || C.gold) : "#0C1016",
+    background: ghost ? "transparent" : (tone || C.gold), color: ghost ? (tone || C.gold) : "#16163A",
     border: ghost ? `1px solid ${(tone || C.gold)}66` : "none", borderRadius: 8,
     padding: small ? "5px 10px" : "8px 14px", fontSize: small ? 12 : 13, fontWeight: 600, fontFamily: SANS,
     opacity: disabled ? 0.45 : 1,
@@ -478,6 +480,29 @@ const Sel = ({ options, ...p }) => (
   </select>
 );
 const Ta = (p) => <textarea rows={3} {...p} style={{ ...inputSt, resize: "vertical", ...p.style }} />;
+
+/* The Town Junction mark — a mosaic starburst in the brand oranges (an SVG
+   approximation of the deck's pixel-sun logo). */
+const TTJMark = ({ size = 40 }) => {
+  const sq = [];
+  const cols = ["#F2A94F", "#EC9744", "#E67E48", "#DE5F45", "#F2B968"];
+  const N = 14;
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    for (let r = 0; r < 3; r++) {
+      if ((i + r) % 3 === 2 && r === 2) continue;
+      const dist = 11 + r * 9;
+      const s = 6.5 - r * 1.6;
+      sq.push({ x: 50 + Math.cos(a) * dist - s / 2, y: 50 + Math.sin(a) * dist - s / 2, s, c: cols[(i + r * 2) % cols.length], rot: (i * 24 + r * 15) % 90 });
+    }
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" aria-label="The Town Junction">
+      {sq.map((q, i) => <rect key={i} x={q.x} y={q.y} width={q.s} height={q.s} fill={q.c} transform={`rotate(${q.rot} ${q.x + q.s / 2} ${q.y + q.s / 2})`} />)}
+      <circle cx="50" cy="50" r="6.5" fill="none" stroke="#EC9744" strokeWidth="3.4" />
+    </svg>
+  );
+};
 
 const Modal = ({ title, onClose, children, wide }) => (
   <div style={{ position: "fixed", inset: 0, background: "#000A", zIndex: 50, display: "flex", alignItems: "flex-start", justifyContent: "center", overflowY: "auto", padding: "40px 12px" }} onClick={onClose}>
@@ -541,15 +566,16 @@ function Login({ users, onLogin, onAttempt, liveOn }) {
     } finally { setBusy(false); }
   };
   return (
-    <div style={{ minHeight: "100vh", background: `radial-gradient(1200px 600px at 70% -10%, #1A2330 0%, ${C.bg} 55%)`, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px", fontFamily: SANS }}>
+    <div style={{ minHeight: "100vh", background: `radial-gradient(1200px 600px at 70% -10%, #24244E 0%, ${C.bg} 55%)`, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px", fontFamily: SANS }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
         <div style={{ textAlign: "center", marginBottom: 26 }}>
-          <div style={{ width: 54, height: 54, margin: "0 auto 14px", borderRadius: 12, border: `1px solid ${C.gold}66`, display: "flex", alignItems: "center", justifyContent: "center", background: "#161D27" }}>
-            <Landmark size={26} color={C.gold} />
+          <div style={{ width: 62, height: 62, margin: "0 auto 14px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <TTJMark size={62} />
           </div>
-          <div style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: C.gold }}>The Town Junction · Nagpur</div>
-          <div style={{ fontFamily: SERIF, fontSize: 34, color: C.text, marginTop: 6 }}>TTJ Team OS</div>
-          <div style={{ color: C.mute, fontSize: 13, marginTop: 6 }}>The official channel. Sign in to take your seat.</div>
+          <div style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: C.gold }}>Nagpur · Kamptee Road</div>
+          <div style={{ fontFamily: SERIF, fontSize: 34, color: C.text, marginTop: 6 }}>The Town Junction</div>
+          <div style={{ fontSize: 10.5, letterSpacing: 2.2, textTransform: "uppercase", color: C.mute, marginTop: 4 }}>Team OS · by Karan Kothari Group</div>
+          <div style={{ color: C.mute, fontSize: 13, marginTop: 10 }}>The official channel. Sign in to take your seat.</div>
         </div>
 
         <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, padding: 22 }}>
@@ -2860,7 +2886,7 @@ function ImportStudio({ state, setState, user, liveStatus }) {
           </div>
           <label style={{ display: "inline-flex" }}>
             <input type="file" accept=".zip,.txt,application/zip,text/plain" style={{ display: "none" }} onChange={onPick} />
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer", background: C.gold, color: "#1a1206", border: "none", borderRadius: 9, padding: "11px 20px", fontSize: 14, fontWeight: 700, fontFamily: SANS }}><Upload size={16} /> Choose WhatsApp export</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer", background: C.gold, color: "#16163A", border: "none", borderRadius: 9, padding: "11px 20px", fontSize: 14, fontWeight: 700, fontFamily: SANS }}><Upload size={16} /> Choose WhatsApp export</span>
           </label>
           <div style={{ fontSize: 11.5, color: C.faint, marginTop: 14, lineHeight: 1.6 }}>
             {key ? <><CheckCircle2 size={12} color={C.green} style={{ verticalAlign: -1, marginRight: 4 }} /> AI key detected.</> : <><AlertTriangle size={12} color={C.amber} style={{ verticalAlign: -1, marginRight: 4 }} /> No AI key set — media/chat analysis needs it (Team & Access → AI key).</>}
@@ -3368,12 +3394,11 @@ export default function App() {
       }}>
         <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${C.lineSoft}` }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 9, border: `1px solid ${C.gold}55`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Landmark size={17} color={C.gold} />
-            </div>
+            <TTJMark size={36} />
             <div>
-              <div style={{ fontFamily: SERIF, fontSize: 15, color: C.text }}>TTJ Team OS</div>
-              <div style={{ fontSize: 10, color: liveStatus === "on" ? C.green : C.faint, letterSpacing: 1, textTransform: "uppercase" }}>{IS_CLOUD ? "Official channel" : liveStatus === "on" ? "● Live · shared" : liveStatus === "connecting" ? "Connecting…" : liveStatus === "error" ? "Live sync offline" : "Standalone · this device"}</div>
+              <div style={{ fontFamily: SERIF, fontSize: 15, color: C.text }}>The Town Junction</div>
+              <div style={{ fontSize: 9, color: C.mute, letterSpacing: 1.6, textTransform: "uppercase" }}>Team OS · Karan Kothari Group</div>
+              <div style={{ fontSize: 10, color: liveStatus === "on" ? C.green : C.faint, letterSpacing: 1, textTransform: "uppercase", marginTop: 2 }}>{IS_CLOUD ? "Official channel" : liveStatus === "on" ? "● Live · shared" : liveStatus === "connecting" ? "Connecting…" : liveStatus === "error" ? "Live sync offline" : "Standalone · this device"}</div>
             </div>
           </div>
         </div>
