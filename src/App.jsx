@@ -253,7 +253,7 @@ const DEFAULT_FB_CONFIG = {
   projectId: "kkbpdashv2",
   storageBucket: "kkbpdashv2.firebasestorage.app",
   messagingSenderId: "187384327940",
-  appId: "1:187384327940:web:b337806b51b116c6db2a51",
+  appId: "1:187384327940:web:173aa0bd852df8a9db2a51",
 };
 const effectiveFbConfig = () => {
   const saved = loadFbConfig();
