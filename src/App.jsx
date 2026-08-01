@@ -296,21 +296,67 @@ const loadFails = () => { try { return JSON.parse(localStorage.getItem(FAILS_KEY
 const recordFail = (un) => { try { const f = loadFails(); f[un] = [...(f[un] || []).filter((t) => Date.now() - t < 15 * 60000), Date.now()]; localStorage.setItem(FAILS_KEY, JSON.stringify(f)); return f[un].length; } catch (e) { return 0; } };
 const failsLeft = (un) => { const f = (loadFails()[un] || []).filter((t) => Date.now() - t < 15 * 60000); return { count: f.length, oldest: f[0] || 0 }; };
 const clearFails = (un) => { try { const f = loadFails(); delete f[un]; localStorage.setItem(FAILS_KEY, JSON.stringify(f)); } catch (e) {} };
-let fbDocRef = null, fbSetDoc = null;
-async function connectLive(cfg, onSnap) {
-  const { initializeApp } = await import("firebase/app");
-  const { initializeFirestore, doc, onSnapshot, setDoc } = await import("firebase/firestore");
-  const app = initializeApp(cfg);
+let fbDocRef = null, fbSetDoc = null, _fbApp = null, _fbDb = null;
+async function fbApp(cfg) {
+  const m = await import("firebase/app");
+  if (!_fbApp) _fbApp = m.getApps().length ? m.getApps()[0] : m.initializeApp(cfg);
+  return { app: _fbApp, mod: m };
+}
+async function getDb(cfg) {
+  const { app } = await fbApp(cfg);
+  const F = await import("firebase/firestore");
   /* auto-detect networks/proxies that break streaming and fall back to long-polling */
-  const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
-  fbDocRef = doc(db, "kkbp", "state");
-  fbSetDoc = setDoc;
-  return onSnapshot(fbDocRef,
+  if (!_fbDb) { try { _fbDb = F.initializeFirestore(app, { experimentalAutoDetectLongPolling: true }); } catch (e) { _fbDb = F.getFirestore(app); } }
+  return { db: _fbDb, F };
+}
+/* ---------- workspace auth (Google sign-in; enforced by Firestore rules) ---------- */
+async function getAuthUser(cfg) {
+  const { app } = await fbApp(cfg);
+  const A = await import("firebase/auth");
+  const auth = A.getAuth(app);
+  try { await A.getRedirectResult(auth); } catch (e) {}
+  return await new Promise((res) => { const off = A.onAuthStateChanged(auth, (u) => { off(); res(u); }, () => res(null)); });
+}
+async function googleSignIn() {
+  const cfg = effectiveFbConfig(); if (!cfg) return;
+  const { app } = await fbApp(cfg);
+  const A = await import("firebase/auth");
+  const auth = A.getAuth(app);
+  const prov = new A.GoogleAuthProvider();
+  prov.setCustomParameters({ prompt: "select_account" });
+  try { await A.signInWithPopup(auth, prov); location.reload(); }
+  catch (e) {
+    const code = (e && e.code) || "";
+    if (/popup|cancelled|blocked/.test(code)) { try { await A.signInWithRedirect(auth, prov); return; } catch (e2) { alert("Google sign-in failed: " + (e2.message || e2)); } }
+    else alert("Google sign-in failed: " + (e.message || e));
+  }
+}
+async function googleSignOut() {
+  try { const cfg = effectiveFbConfig(); const { app } = await fbApp(cfg); const A = await import("firebase/auth"); await A.signOut(A.getAuth(app)); } catch (e) {}
+  location.reload();
+}
+/* The access list lives in its own document (kkbp/allowlist); the rules allow
+   only the admin's Google account to change it. */
+async function readAllowlist() {
+  const cfg = effectiveFbConfig(); if (!cfg) return null;
+  try { const { db, F } = await getDb(cfg); const s = await F.getDoc(F.doc(db, "kkbp", "allowlist")); return s.exists() ? (s.data().emails || []) : []; }
+  catch (e) { return null; }
+}
+async function writeAllowlist(emails) {
+  const cfg = effectiveFbConfig(); if (!cfg) throw new Error("no workspace");
+  const { db, F } = await getDb(cfg);
+  await F.setDoc(F.doc(db, "kkbp", "allowlist"), { emails });
+}
+async function connectLive(cfg, onSnap) {
+  const { db, F } = await getDb(cfg);
+  fbDocRef = F.doc(db, "kkbp", "state");
+  fbSetDoc = F.setDoc;
+  return F.onSnapshot(fbDocRef,
     (snap) => {
       const d = snap.data();
       onSnap({ exists: !!(d && d.data), by: d ? d.by : null, data: d ? d.data : null });
     },
-    (err) => { console.error("live sync error", err); onSnap({ error: true }); });
+    (err) => { console.error("live sync error", err); onSnap({ error: true, denied: (err && err.code) === "permission-denied" }); });
 }
 async function pushLive(state) {
   if (!fbDocRef || !fbSetDoc) return false;
@@ -573,7 +619,7 @@ const SectionTitle = ({ eyebrow, title, sub, accent }) => (
 
 
 /* ================= LOGIN ================= */
-function Login({ users, onLogin, onAttempt, liveOn }) {
+function Login({ users, onLogin, onAttempt, liveOn, liveStatus, authInfo }) {
   const [un, setUn] = useState("");
   const [pw, setPw] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -619,6 +665,28 @@ function Login({ users, onLogin, onAttempt, liveOn }) {
           <div style={{ fontSize: 10.5, letterSpacing: 2.2, textTransform: "uppercase", color: C.mute, marginTop: 4 }}>Team OS · by Karan Kothari Group</div>
           <div style={{ color: C.mute, fontSize: 13, marginTop: 10 }}>The official channel. Sign in to take your seat.</div>
         </div>
+
+        {liveStatus === "needauth" && (
+          <div style={{ background: C.panel, border: `1px solid ${C.gold}55`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
+            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}><b>Join the live workspace</b> — a one-time Google sign-in on this device keeps everything in sync and keeps outsiders out.</div>
+            <div style={{ marginTop: 10 }}><Btn onClick={googleSignIn}><KeyRound size={14} /> Continue with Google</Btn></div>
+            <div style={{ fontSize: 11, color: C.faint, marginTop: 8 }}>Skip it and sign in below to work offline on this device only.</div>
+          </div>
+        )}
+        {liveStatus === "denied" && (
+          <div style={{ background: C.panel, border: `1px solid ${C.red}66`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
+            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}>This device's Google account{authInfo?.email ? <> (<b>{authInfo.email}</b>)</> : null} isn't on the workspace access list yet. Ask Rishi to add it, or switch accounts.</div>
+            <div style={{ marginTop: 10 }}><Btn ghost onClick={googleSignOut}>Use a different Google account</Btn></div>
+          </div>
+        )}
+        {authInfo && liveStatus === "on" && (
+          <div style={{ textAlign: "center", fontSize: 11.5, color: C.green, marginBottom: 12 }}>Workspace unlocked · {authInfo.email}</div>
+        )}
+        {!authInfo && liveStatus === "on" && effectiveFbConfig() && (
+          <div style={{ textAlign: "center", fontSize: 11.5, color: C.faint, marginBottom: 12 }}>
+            Tip: <span onClick={googleSignIn} style={{ color: C.gold, cursor: "pointer", textDecoration: "underline" }}>add Google sign-in on this device</span> so it keeps workspace access when security tightens.
+          </div>
+        )}
 
         <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, padding: 22 }}>
           <Field label="Username">
@@ -691,7 +759,10 @@ function Overview({ state, setState, user, goTo, liveStatus }) {
             {liveStatus !== "on" && (
               <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 12px", background: `${C.amber}12`, border: `1px solid ${C.amber}44`, borderRadius: 8, marginBottom: 10, fontSize: 12.5, color: C.text, lineHeight: 1.5 }}>
                 <AlertTriangle size={14} color={C.amber} style={{ flexShrink: 0, marginTop: 1 }} />
-                <span><b>Live sync is off on this device</b> — you're seeing this device's data only, not the team's. {isAppAdmin(user) ? "Connect the shared workspace in Team & Access to make every device live." : "Ask Rishi to connect the shared workspace."}</span>
+                <span><b>Live sync is off on this device</b> — you're seeing this device's data only, not the team's.{" "}
+                  {liveStatus === "needauth" ? <>One-time Google sign-in needed: <Btn small onClick={googleSignIn}>Continue with Google</Btn></>
+                    : liveStatus === "denied" ? "This device's Google account isn't on the workspace access list — ask Rishi to add it (Team & Access → Workspace access)."
+                    : isAppAdmin(user) ? "Connect the shared workspace in Team & Access to make every device live." : "Ask Rishi to connect the shared workspace."}</span>
               </div>
             )}
             {waiting.length > 0 && (
@@ -2721,7 +2792,7 @@ function SecurityPage({ state, setState, user, liveStatus }) {
                 return (
                   <tr key={s.u + s.d}>
                     <Td style={{ fontWeight: 600 }}>{uName2(s.u)}{me && <span style={{ color: C.gold, fontSize: 10.5, marginLeft: 6 }}>(this device)</span>}</Td>
-                    <Td style={{ color: C.mute, fontSize: 12 }}>{s.ua} · {s.d}</Td>
+                    <Td style={{ color: C.mute, fontSize: 12 }}>{s.ua}{s.em ? <> · <span style={{ color: C.text }}>{s.em}</span></> : ""} · {s.d}</Td>
                     <Td style={{ color: C.mute, fontSize: 12 }}>{fmtTs(s.in)}</Td>
                     <Td style={{ color: C.mute, fontSize: 12 }}>{ago(s.seen)} ago</Td>
                     <Td><Badge text={isOnline ? "Online" : "Offline"} color={isOnline ? C.green : C.faint} /></Td>
@@ -3087,10 +3158,46 @@ function ImportStudio({ state, setState, user, liveStatus }) {
 }
 
 /* ================= TEAM & ACCESS ================= */
-function Team({ state, setState, user, liveStatus }) {
+function Team({ state, setState, user, liveStatus, authInfo }) {
   const [edit, setEdit] = useState(null);
   const [cfgText, setCfgText] = useState("");
+  const [wl, setWl] = useState(null);        /* workspace allowlist: null = not loaded/unavailable */
+  const [wlText, setWlText] = useState("");
+  const [wlBusy, setWlBusy] = useState(false);
   const canWrite = isAppAdmin(user);
+  useEffect(() => {
+    if (!canWrite) return;
+    readAllowlist().then((e) => { setWl(e); setWlText((e || []).join("\n")); });
+  }, [canWrite]);
+  const saveAllowlist = async () => {
+    const emails = wlText.split(/[\n,;]+/).map((x) => x.trim().toLowerCase()).filter((x) => x.includes("@"));
+    if (authInfo?.email && !emails.includes(authInfo.email.toLowerCase())) emails.unshift(authInfo.email.toLowerCase());
+    setWlBusy(true);
+    try {
+      await writeAllowlist(emails);
+      setWl(emails); setWlText(emails.join("\n"));
+      setState((s) => withLog(s, user.name, `updated workspace access list (${emails.length} account${emails.length === 1 ? "" : "s"})`));
+      alert(`Saved — ${emails.length} Google account${emails.length === 1 ? "" : "s"} can reach the workspace once the strict rules are published.`);
+    } catch (e) { alert("Couldn't save the access list: " + (e.message || e)); }
+    setWlBusy(false);
+  };
+  const RULES_TEXT = `rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function allowed() {
+      return request.auth != null &&
+        request.auth.token.email in get(/databases/$(database)/documents/kkbp/allowlist).data.emails;
+    }
+    match /kkbp/state {
+      allow read, write: if allowed();
+    }
+    match /kkbp/allowlist {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null &&
+        request.auth.token.email in ['${(authInfo?.email || "YOUR-GOOGLE-EMAIL").toLowerCase()}'];
+    }
+  }
+}`;
   const save = async () => {
     const un = (edit.username || "").trim().toLowerCase();
     if (state.users.some((u) => u.id !== edit.id && (u.username || "").toLowerCase() === un)) return alert("That username is already in use.");
@@ -3272,6 +3379,39 @@ function Team({ state, setState, user, liveStatus }) {
           </div>
         </Card>
       )}
+      {canWrite && (
+        <Card title="Workspace access — Google sign-in & allowlist" style={{ marginBottom: 12, maxWidth: 760 }}>
+          <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.65 }}>
+            This device's Google account:{" "}
+            {authInfo?.email
+              ? <><Badge text={authInfo.email} color={C.green} /> <Btn small ghost onClick={googleSignOut}>Switch</Btn></>
+              : <><Badge text="not signed in" color={C.amber} /> <Btn small onClick={googleSignIn}>Continue with Google</Btn></>}
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Field label="Google accounts allowed into the workspace (one per line)">
+              <Ta rows={6} value={wlText} onChange={(e) => setWlText(e.target.value)} placeholder={"rishi@kkjpl.com\nnitin@kkjpl.com\nsomeone@gmail.com"} />
+            </Field>
+            <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
+              <Btn onClick={saveAllowlist} disabled={wlBusy || !authInfo}>{wlBusy ? <Loader2 size={14} className="spin" /> : <ShieldCheck size={14} />} Save access list</Btn>
+              {wl === null && <span style={{ fontSize: 11.5, color: C.faint }}>List not loaded — sign in with Google first, then reopen this page.</span>}
+            </div>
+          </div>
+          <div style={{ fontSize: 12.5, color: C.mute, marginTop: 14, lineHeight: 1.75 }}>
+            <b style={{ color: C.text }}>One-time setup to enforce this:</b><br />
+            1. Firebase console → <b>Authentication → Get started → Sign-in method → Google → Enable</b> → Save.<br />
+            2. Authentication → <b>Settings → Authorized domains</b> → add <b>rishiikothari.github.io</b>.<br />
+            3. Here: sign in with Google above, add the team's Google emails, <b>Save access list</b>.<br />
+            4. Firestore console → <b>Rules</b> → replace with the rules below → <b>Publish</b>. From that moment only listed accounts can touch the data — with or without the app.
+          </div>
+          <div style={{ marginTop: 10, position: "relative" }}>
+            <pre style={{ background: C.panel3, border: `1px solid ${C.line}`, borderRadius: 8, padding: 12, fontSize: 11, color: C.text, overflowX: "auto", lineHeight: 1.5 }}>{RULES_TEXT}</pre>
+            <Btn small ghost onClick={() => { try { navigator.clipboard.writeText(RULES_TEXT); alert("Rules copied — paste into Firestore → Rules and Publish."); } catch (e) { alert("Copy failed — select the text manually."); } }}>Copy rules</Btn>
+          </div>
+          <div style={{ fontSize: 11.5, color: C.faint, marginTop: 10, lineHeight: 1.6 }}>
+            The admin line in the rules is pinned to your signed-in Google account — only you can change the access list, even among owners. Devices without an allowed Google sign-in keep working offline but never see team data.
+          </div>
+        </Card>
+      )}
       <div style={{ fontSize: 12, color: C.faint, marginTop: 4, maxWidth: 760, lineHeight: 1.6 }}>
         <AlertTriangle size={12} style={{ verticalAlign: -1, marginRight: 5 }} color={C.amber} />
         Password access is a gate for day-to-day discipline, not bank-grade security — anyone with the app link shares the same underlying data store, and confidential registers should be treated accordingly. For hard isolation of agencies and brokers, the next step is a real backend with server-side auth; this schema maps to it 1:1.
@@ -3315,7 +3455,8 @@ export default function App() {
   const [saveTick, setSaveTick] = useState("");
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
   const [navOpen, setNavOpen] = useState(false);
-  const [liveStatus, setLiveStatus] = useState(effectiveFbConfig() ? "connecting" : "off"); // off | connecting | on | error
+  const [liveStatus, setLiveStatus] = useState(effectiveFbConfig() ? "connecting" : "off"); // off | connecting | on | error | needauth | denied
+  const [authInfo, setAuthInfo] = useState(null); // { email, uid } once Google-signed-in
   const remoteApply = React.useRef(false);
   const latestState = React.useRef(null);
   useEffect(() => { latestState.current = state; }, [state]);
@@ -3356,6 +3497,15 @@ export default function App() {
         if (!loaded || stale) await saveState(base); /* overwrite any stale local copy */
         return;
       }
+      /* Workspace gate: the shared data is only reachable with a Google
+         sign-in that the Firestore rules accept. Without one, this device
+         works offline until the user signs in (one time per device). */
+      let authUser = null;
+      try { authUser = await getAuthUser(cfg); } catch (e) { console.error("auth init failed", e); }
+      if (authUser) setAuthInfo({ email: authUser.email || "", uid: authUser.uid });
+      /* No Google session? Still try to connect: while the rules are open this
+         works and nothing is disrupted. Once the strict rules are published,
+         the deny below asks this device for its one-time Google sign-in. */
       /* Live mode: wait for the first shared snapshot so a joining device
          never overwrites the team's data with its own local copy. If Firestore
          answers slower than the fallback (first-ever connection on a slow
@@ -3373,7 +3523,7 @@ export default function App() {
       };
       try {
         await connectLive(cfg, (msg) => {
-          if (msg.error) { clearTimeout(fallback); if (first) { first = false; finishBoot(base, false); } setLiveStatus("error"); return; }
+          if (msg.error) { clearTimeout(fallback); if (first) { first = false; finishBoot(base, false); } setLiveStatus(msg.denied ? (authUser ? "denied" : "needauth") : "error"); return; }
           clearTimeout(fallback);
           setLiveStatus("on"); /* any successful snapshot = connected, even one arriving after the fallback */
           if (first) {
@@ -3446,7 +3596,7 @@ export default function App() {
   if (!state) {
     return <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", color: C.mute, fontFamily: SANS, fontSize: 14 }}>Loading TTJ Team OS…</div>;
   }
-  if (!user) return <Login users={state.users} liveOn={liveStatus === "on"}
+  if (!user) return <Login users={state.users} liveOn={liveStatus === "on"} liveStatus={liveStatus} authInfo={authInfo}
     onAttempt={({ un, ok }) => {
       setState((s) => ({ ...s, loginEvents: [{ ts: Date.now(), un, ok, uid: null, d: DEVICE_ID, ua: uaInfo() }, ...(s.loginEvents || [])].slice(0, 300) }));
     }}
@@ -3459,7 +3609,7 @@ export default function App() {
         ...s,
         users: up ? s.users.map((x) => x.id === u.id ? { ...x, ...up, password: "" } : x) : s.users,
         loginEvents: [{ ts: now, un: u.username, ok: true, uid: u.id, d: DEVICE_ID, ua: uaInfo() }, ...(s.loginEvents || [])].slice(0, 300),
-        sessions: { ...(s.sessions || {}), [`${u.id}|${DEVICE_ID}`]: { u: u.id, d: DEVICE_ID, ua: uaInfo(), in: now, seen: now } },
+        sessions: { ...(s.sessions || {}), [`${u.id}|${DEVICE_ID}`]: { u: u.id, d: DEVICE_ID, ua: uaInfo(), em: (authInfo && authInfo.email) || "", in: now, seen: now } },
       }));
       setUser(u); setPage("overview"); saveSession({ userId: u.id, page: "overview", loginTs: now });
     }} />;
@@ -3499,7 +3649,7 @@ export default function App() {
     constitution: <Constitution state={state} setState={writeState} user={user} />,
     import: <ImportStudio state={state} setState={writeState} user={user} liveStatus={liveStatus} />,
     security: <SecurityPage state={state} setState={writeState} user={user} liveStatus={liveStatus} />,
-    team: <Team state={state} setState={writeState} user={user} liveStatus={liveStatus} />,
+    team: <Team state={state} setState={writeState} user={user} liveStatus={liveStatus} authInfo={authInfo} />,
   }[page] || <Overview state={state} setState={writeState} user={user} goTo={setPage} liveStatus={liveStatus} />;
 
   return (
@@ -3524,7 +3674,7 @@ export default function App() {
             <div>
               <div style={{ fontFamily: SERIF, fontSize: 15, color: C.text }}>The Town Junction</div>
               <div style={{ fontSize: 9, color: C.mute, letterSpacing: 1.6, textTransform: "uppercase" }}>Team OS · Karan Kothari Group</div>
-              <div style={{ fontSize: 10, color: liveStatus === "on" ? C.green : C.faint, letterSpacing: 1, textTransform: "uppercase", marginTop: 2 }}>{IS_CLOUD ? "Official channel" : liveStatus === "on" ? "● Live · shared" : liveStatus === "connecting" ? "Connecting…" : liveStatus === "error" ? "Live sync offline" : "Standalone · this device"}</div>
+              <div style={{ fontSize: 10, color: liveStatus === "on" ? C.green : C.faint, letterSpacing: 1, textTransform: "uppercase", marginTop: 2 }}>{IS_CLOUD ? "Official channel" : liveStatus === "on" ? "● Live · shared" : liveStatus === "connecting" ? "Connecting…" : liveStatus === "needauth" ? "Google sign-in needed for live" : liveStatus === "denied" ? "Workspace access pending" : liveStatus === "error" ? "Live sync offline" : "Standalone · this device"}</div>
             </div>
           </div>
         </div>
