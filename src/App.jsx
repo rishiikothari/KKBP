@@ -93,8 +93,8 @@ const canWritePage = (key, u) => {
 const CMA_TARGET_L = 541;
 
 const SEED_USERS = [
-  { id:"u1", name:"Rishi Kothari", dept:"exec", subRole:"Owner / Promoter · Oversees everything day-to-day · IT & Digital (rishi@kkjpl.com)", tier:"head", exec:"owner", finApprover:true, appAdmin:true, username:"rishi", password:"7001" },
-  { id:"u2", name:"Nitin Kothari", dept:"exec", subRole:"Owner & Managing Director · Final authority on every decision (nitin@kkjpl.com)", tier:"head", exec:"owner", finApprover:true, username:"nitin", password:"7002" },
+  { id:"u1", name:"Rishi Kothari", dept:"exec", subRole:"Owner / Promoter · Oversees everything day-to-day · IT & Digital (rishi@kkjpl.com)", tier:"head", exec:"owner", finApprover:true, appAdmin:true, email:"rishi@kkjpl.com", username:"rishi", password:"7001" },
+  { id:"u2", name:"Nitin Kothari", dept:"exec", subRole:"Owner & Managing Director · Final authority on every decision (nitin@kkjpl.com)", tier:"head", exec:"owner", finApprover:true, email:"nitin@kkjpl.com", username:"nitin", password:"7002" },
   { id:"u3", name:"Arjun Kothari", dept:"exec", subRole:"Owner / Promoter · Brand & PR direction", tier:"head", exec:"owner", finApprover:true, username:"arjun", password:"7003" },
   { id:"u4", name:"Manoj Agarwal", dept:"exec", subRole:"CEO — External consultant (MKA) · Runs weekly cadence, CAM & sign-offs", tier:"head", exec:"ceo", username:"manoj", password:"7004" },
   { id:"u5", name:"Sushil Ahuja", dept:"leasing", subRole:"Head of Leasing · Consultant, Delhi (dedicated to TTJ since 1 Jun)", tier:"head", username:"sushil", password:"7005" },
@@ -316,14 +316,18 @@ async function getAuthUser(cfg) {
   const auth = A.getAuth(app);
   try { await A.getRedirectResult(auth); } catch (e) {}
   return await new Promise((res) => {
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; res(v); } };
+    /* Never let a stalled auth init hang the whole boot. */
+    const t = setTimeout(() => finish(null), 6000);
     const off = A.onAuthStateChanged(auth, async (u) => {
-      off();
+      off(); clearTimeout(t);
       /* Force a fresh reload + token so a just-clicked email verification is
          reflected (the cached token still says unverified otherwise, and the
          rules keep denying). */
       if (u) { try { await u.reload(); await u.getIdToken(true); } catch (e) {} }
-      res(u);
-    }, () => res(null));
+      finish(u);
+    }, () => { clearTimeout(t); finish(null); });
   });
 }
 /* Pre-warm the auth module + app so the Google popup can be opened
@@ -392,6 +396,19 @@ async function emailWorkspaceReset(email) {
    wrapped deterministically. */
 const SEAT_DOMAIN = "seat.ttjteamos.app";
 const seatEmail = (username) => `${String(username || "").toLowerCase()}@${SEAT_DOMAIN}`;
+/* Resolve a Firebase-authenticated email to exactly one team seat, so that a
+   sign-in IS an identity (never "unlock the device, then be anyone"):
+   - a hidden seat email  <username>@seat.ttjteamos.app  → that username's seat
+   - a real Google/company email → the seat whose linked `email` matches it */
+function seatForEmail(users, email) {
+  if (!email) return null;
+  const e = email.toLowerCase();
+  if (e.endsWith("@" + SEAT_DOMAIN)) {
+    const un = e.slice(0, e.length - (SEAT_DOMAIN.length + 1));
+    return (users || []).find((u) => (u.username || "").toLowerCase() === un) || null;
+  }
+  return (users || []).find((u) => (u.email || "").toLowerCase() === e) || null;
+}
 const seatSecret = (pass) => `ttj$${pass}`; /* >=6 chars even for a 4-digit passcode */
 /* Sign the device into Firebase as this seat (creating the hidden account on
    first use). Returns {ok, created} or {ok:false, msg}. Best-effort: if there
@@ -731,7 +748,7 @@ const SectionTitle = ({ eyebrow, title, sub, accent }) => (
 
 
 /* ================= LOGIN ================= */
-function Login({ users, onLogin, onAttempt, liveOn, liveStatus, authInfo }) {
+function Login({ users, onLogin, onAttempt, liveOn, liveStatus, authInfo, authNoSeat }) {
   useEffect(() => { if (liveStatus === "needauth" || liveStatus === "on") warmAuth(); }, [liveStatus]);
   const [un, setUn] = useState("");
   const [pw, setPw] = useState("");
@@ -791,27 +808,10 @@ function Login({ users, onLogin, onAttempt, liveOn, liveStatus, authInfo }) {
           <div style={{ color: C.mute, fontSize: 13, marginTop: 10 }}>The official channel. Sign in to take your seat.</div>
         </div>
 
-        {liveStatus === "needauth" && (
-          <div style={{ background: C.panel, border: `1px solid ${C.gold}55`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
-            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}><b>Join the live workspace</b> — a one-time sign-in on this device keeps everything in sync and keeps outsiders out.</div>
-            <div style={{ fontSize: 11.5, color: C.mute, marginTop: 12 }}>Sign in with your email (first time creates your account — you verify it once by mail):</div>
-            <EmailAuthMini />
-            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 14, borderTop: `1px solid ${C.lineSoft}`, paddingTop: 12 }}>Have a Google account and not on Safari? <span onClick={googleSignIn} style={{ color: C.gold, cursor: "pointer", textDecoration: "underline" }}>Continue with Google</span> (may not work on iPhone/iPad).</div>
-            <div style={{ fontSize: 11, color: C.faint, marginTop: 10 }}>Or skip and sign in below to work offline on this device only.</div>
-          </div>
-        )}
-        {liveStatus === "denied" && (
+        {authNoSeat && (
           <div style={{ background: C.panel, border: `1px solid ${C.red}66`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
-            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}>This device's account{authInfo?.email ? <> (<b>{authInfo.email}</b>)</> : null} can't enter the workspace yet. Either it isn't on the access list (ask Rishi to add it), or — if you signed up by email — you haven't clicked the verification link yet.</div>
-            <div style={{ marginTop: 10 }}><Btn ghost onClick={googleSignOut}>Switch account</Btn></div>
-          </div>
-        )}
-        {authInfo && liveStatus === "on" && (
-          <div style={{ textAlign: "center", fontSize: 11.5, color: C.green, marginBottom: 12 }}>Workspace unlocked · {authInfo.email}</div>
-        )}
-        {!authInfo && liveStatus === "on" && effectiveFbConfig() && (
-          <div style={{ textAlign: "center", fontSize: 11.5, color: C.faint, marginBottom: 12 }}>
-            Tip: <span onClick={googleSignIn} style={{ color: C.gold, cursor: "pointer", textDecoration: "underline" }}>add Google sign-in on this device</span> so it keeps workspace access when security tightens.
+            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}>You're signed in as <b>{authNoSeat}</b>, but that email isn't linked to a team member yet. Ask Rishi to add it to your profile (Team &amp; Access), or sign in with your username instead.</div>
+            <div style={{ marginTop: 10 }}><Btn ghost onClick={googleSignOut}>Sign out / use another account</Btn></div>
           </div>
         )}
 
@@ -855,9 +855,18 @@ function Login({ users, onLogin, onAttempt, liveOn, liveStatus, authInfo }) {
             <div style={{ marginTop: 18 }}>
               <Btn onClick={tryLogin} disabled={!un.trim() || !pw || busy}>{busy ? <Loader2 size={14} className="spin" /> : <KeyRound size={14} />} Sign in</Btn>
             </div>
-            <div style={{ color: C.faint, fontSize: 11, marginTop: 14, lineHeight: 1.6 }}>
-              First time in? Use the passcode the Owner gave you — you'll set your own password next. Email &amp; Google sign-in are above when the workspace asks for it.
+            <div style={{ color: C.faint, fontSize: 11, marginTop: 12, lineHeight: 1.6 }}>
+              First time in? Use the passcode the Owner gave you — you'll set your own password next.
             </div>
+            {effectiveFbConfig() && (
+              <div style={{ marginTop: 16, borderTop: `1px solid ${C.lineSoft}`, paddingTop: 14 }}>
+                <div style={{ fontSize: 11, color: C.mute, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Or sign in as yourself</div>
+                <Btn ghost onClick={googleSignIn}><KeyRound size={14} /> Continue with Google</Btn>
+                <div style={{ fontSize: 11.5, color: C.faint, margin: "12px 0 4px" }}>With your email &amp; password:</div>
+                <EmailAuthMini />
+                <div style={{ fontSize: 10.5, color: C.faint, marginTop: 8, lineHeight: 1.5 }}>Email / Google sign you in as the team member they're linked to. On iPhone/iPad, username + passcode is the most reliable.</div>
+              </div>
+            )}
           </div>
         )}
         <div style={{ textAlign: "center", fontSize: 11, color: liveOn ? C.green : C.faint, marginTop: 14 }}>
@@ -3594,6 +3603,7 @@ service cloud.firestore {
               </select>
             </Field>
             <Field label="Username"><Inp value={edit.username} autoCapitalize="none" onChange={(e) => setEdit({ ...edit, username: e.target.value.toLowerCase().replace(/\s+/g, ".") })} placeholder="e.g. leasing.head" /></Field>
+            <Field label="Linked email (optional — lets them sign in with Google/email)"><Inp value={edit.email || ""} autoCapitalize="none" inputMode="email" onChange={(e) => setEdit({ ...edit, email: e.target.value.trim().toLowerCase() })} placeholder="name@company.com" /></Field>
             <Field label={edit.id ? "Reset password (blank = keep current)" : "Password (min 4 characters — longer is safer)"}>
               <Inp value={edit.newPw || ""} onChange={(e) => setEdit({ ...edit, newPw: e.target.value })} placeholder={edit.id ? "••••••••" : ""} />
             </Field>
@@ -3617,7 +3627,8 @@ export default function App() {
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
   const [navOpen, setNavOpen] = useState(false);
   const [liveStatus, setLiveStatus] = useState(effectiveFbConfig() ? "connecting" : "off"); // off | connecting | on | error | needauth | denied
-  const [authInfo, setAuthInfo] = useState(null); // { email, uid } once Google-signed-in
+  const [authInfo, setAuthInfo] = useState(null); // { email, uid } once signed in via Firebase
+  const [authNoSeat, setAuthNoSeat] = useState(null); // email string when signed in but not linked to any seat
   const remoteApply = React.useRef(false);
   const latestState = React.useRef(null);
   useEffect(() => { latestState.current = state; }, [state]);
@@ -3630,18 +3641,24 @@ export default function App() {
 
   useEffect(() => {
     let booted = false;
+    let authEmail = null; /* set once the Firebase session resolves */
     const finishBoot = (st, fromRemote) => {
       if (fromRemote) remoteApply.current = true;
       setState(st);
       if (booted) return;
       booted = true;
+      /* Identity = whoever is signed in. A Firebase session (Google, email, or
+         a username's hidden seat account) resolves to exactly one seat and wins
+         over any locally-saved seat, so there is no "unlock then be anyone". */
+      const byAuth = authEmail ? seatForEmail(st.users, authEmail) : null;
       const sess = loadSession();
-      if (sess) {
-        const u = st.users.find((x) => x.id === sess.userId);
-        if (u) {
-          setUser(u);
-          if (sess.page && PAGES.some((pg) => pg.key === sess.page && pageAllowed(pg, u))) setPage(sess.page);
-        }
+      const bySess = sess && st.users.find((x) => x.id === sess.userId);
+      const u = byAuth || (authEmail ? null : bySess); /* if Firebase-authed but unlinked, don't fall back to a saved seat */
+      if (u) {
+        setUser(u);
+        if (sess && sess.page && PAGES.some((pg) => pg.key === sess.page && pageAllowed(pg, u))) setPage(sess.page);
+      } else if (authEmail && !byAuth) {
+        setAuthNoSeat(authEmail); /* signed in, but this email isn't linked to a team member */
       }
     };
     (async () => {
@@ -3663,7 +3680,7 @@ export default function App() {
          works offline until the user signs in (one time per device). */
       let authUser = null;
       try { authUser = await getAuthUser(cfg); } catch (e) { console.error("auth init failed", e); }
-      if (authUser) setAuthInfo({ email: authUser.email || "", uid: authUser.uid });
+      if (authUser) { setAuthInfo({ email: authUser.email || "", uid: authUser.uid }); authEmail = authUser.email || null; }
       /* No Google session? Still try to connect: while the rules are open this
          works and nothing is disrupted. Once the strict rules are published,
          the deny below asks this device for its one-time Google sign-in. */
@@ -3757,7 +3774,7 @@ export default function App() {
   if (!state) {
     return <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", color: C.mute, fontFamily: SANS, fontSize: 14 }}>Loading TTJ Team OS…</div>;
   }
-  if (!user) return <Login users={state.users} liveOn={liveStatus === "on"} liveStatus={liveStatus} authInfo={authInfo}
+  if (!user) return <Login users={state.users} liveOn={liveStatus === "on"} liveStatus={liveStatus} authInfo={authInfo} authNoSeat={authNoSeat}
     onAttempt={({ un, ok }) => {
       setState((s) => ({ ...s, loginEvents: [{ ts: Date.now(), un, ok, uid: null, d: DEVICE_ID, ua: uaInfo() }, ...(s.loginEvents || [])].slice(0, 300) }));
     }}
@@ -3889,9 +3906,13 @@ export default function App() {
               <div style={{ fontSize: 12, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</div>
               <div style={{ fontSize: 9.5, color: C.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.subRole}</div>
             </div>
-            <LogOut size={15} color={C.mute} style={{ cursor: "pointer" }} onClick={() => {
+            <LogOut size={15} color={C.mute} style={{ cursor: "pointer" }} onClick={async () => {
               setState((s) => { const k = `${user.id}|${DEVICE_ID}`; if (!s || !(s.sessions || {})[k]) return s; const { [k]: _gone, ...rest } = s.sessions; return { ...s, sessions: rest }; });
-              saveSession(null); setUser(null);
+              saveSession(null);
+              /* End the Firebase session too, so the next person signs in as
+                 themselves rather than inheriting this identity. */
+              if (effectiveFbConfig()) { await googleSignOut(); return; }
+              setUser(null);
             }} title="Sign out" />
           </div>
           <div style={{ fontSize: 10, color: saveTick.includes("⚠") ? C.red : C.green, marginTop: 8, height: 12 }}>{saveTick}</div>
