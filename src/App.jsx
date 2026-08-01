@@ -335,6 +335,56 @@ async function googleSignOut() {
   try { const cfg = effectiveFbConfig(); const { app } = await fbApp(cfg); const A = await import("firebase/auth"); await A.signOut(A.getAuth(app)); } catch (e) {}
   location.reload();
 }
+/* Email/password workspace sign-in for members without Google accounts.
+   Unknown emails self-register; a verification mail must be clicked before the
+   rules let the account in (prevents impersonating an allowlisted address). */
+async function emailWorkspaceSignIn(email, password) {
+  const cfg = effectiveFbConfig(); if (!cfg) return { ok: false, msg: "No shared workspace configured." };
+  const { app } = await fbApp(cfg);
+  const A = await import("firebase/auth");
+  const auth = A.getAuth(app);
+  try {
+    const cred = await A.signInWithEmailAndPassword(auth, email, password);
+    if (!cred.user.emailVerified) {
+      try { await A.sendEmailVerification(cred.user); } catch (e) {}
+      return { ok: false, msg: "One step left — we've emailed you a verification link. Open it, then reload this page." };
+    }
+    location.reload(); return { ok: true };
+  } catch (e) {
+    const code = (e && e.code) || "";
+    if (code.includes("user-not-found")) {
+      try {
+        const cred = await A.createUserWithEmailAndPassword(auth, email, password);
+        try { await A.sendEmailVerification(cred.user); } catch (e2) {}
+        return { ok: false, msg: "Account created — check your inbox for the verification link, click it, then reload this page." };
+      } catch (e3) { return { ok: false, msg: (e3 && e3.message) || String(e3) }; }
+    }
+    if (code.includes("wrong-password") || code.includes("invalid-credential")) return { ok: false, msg: "Wrong password for this email. Use Reset if you've forgotten it." };
+    return { ok: false, msg: (e && e.message) || String(e) };
+  }
+}
+async function emailWorkspaceReset(email) {
+  try { const cfg = effectiveFbConfig(); const { app } = await fbApp(cfg); const A = await import("firebase/auth"); await A.sendPasswordResetEmail(A.getAuth(app), email); return "Password-reset link sent — check your inbox."; }
+  catch (e) { return "Couldn't send reset: " + ((e && e.message) || e); }
+}
+/* Compact email sign-in block used on the login gate and in Team & Access. */
+function EmailAuthMini() {
+  const [em, setEm] = useState(""); const [pw, setPw] = useState(""); const [msg, setMsg] = useState(""); const [busy, setBusy] = useState(false);
+  const go = async () => { setBusy(true); setMsg(""); const r = await emailWorkspaceSignIn(em.trim(), pw); if (!r.ok) setMsg(r.msg); setBusy(false); };
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <Inp value={em} onChange={(e) => setEm(e.target.value)} placeholder="you@company.com" autoCapitalize="none" inputMode="email" />
+        <Inp type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="password (min 6)" />
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <Btn small onClick={go} disabled={busy || !em.includes("@") || pw.length < 6}>{busy ? <Loader2 size={13} className="spin" /> : <KeyRound size={13} />} Sign in / create with email</Btn>
+        <Btn small ghost onClick={async () => { if (!em.includes("@")) return setMsg("Type your email first."); setMsg(await emailWorkspaceReset(em.trim())); }}>Reset</Btn>
+      </div>
+      {msg && <div style={{ fontSize: 11.5, color: C.amber, marginTop: 8, lineHeight: 1.5 }}>{msg}</div>}
+    </div>
+  );
+}
 /* The access list lives in its own document (kkbp/allowlist); the rules allow
    only the admin's Google account to change it. */
 async function readAllowlist() {
@@ -670,13 +720,15 @@ function Login({ users, onLogin, onAttempt, liveOn, liveStatus, authInfo }) {
           <div style={{ background: C.panel, border: `1px solid ${C.gold}55`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
             <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}><b>Join the live workspace</b> — a one-time Google sign-in on this device keeps everything in sync and keeps outsiders out.</div>
             <div style={{ marginTop: 10 }}><Btn onClick={googleSignIn}><KeyRound size={14} /> Continue with Google</Btn></div>
-            <div style={{ fontSize: 11, color: C.faint, marginTop: 8 }}>Skip it and sign in below to work offline on this device only.</div>
+            <div style={{ fontSize: 11.5, color: C.mute, marginTop: 12 }}>No Google account? Use your email — first time creates your workspace account (you'll verify it by mail once):</div>
+            <EmailAuthMini />
+            <div style={{ fontSize: 11, color: C.faint, marginTop: 10 }}>Skip it and sign in below to work offline on this device only.</div>
           </div>
         )}
         {liveStatus === "denied" && (
           <div style={{ background: C.panel, border: `1px solid ${C.red}66`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
-            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}>This device's Google account{authInfo?.email ? <> (<b>{authInfo.email}</b>)</> : null} isn't on the workspace access list yet. Ask Rishi to add it, or switch accounts.</div>
-            <div style={{ marginTop: 10 }}><Btn ghost onClick={googleSignOut}>Use a different Google account</Btn></div>
+            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}>This device's account{authInfo?.email ? <> (<b>{authInfo.email}</b>)</> : null} can't enter the workspace yet. Either it isn't on the access list (ask Rishi to add it), or — if you signed up by email — you haven't clicked the verification link yet.</div>
+            <div style={{ marginTop: 10 }}><Btn ghost onClick={googleSignOut}>Switch account</Btn></div>
           </div>
         )}
         {authInfo && liveStatus === "on" && (
@@ -3186,6 +3238,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function allowed() {
       return request.auth != null &&
+        request.auth.token.email_verified &&
         request.auth.token.email in get(/databases/$(database)/documents/kkbp/allowlist).data.emails;
     }
     match /kkbp/state {
@@ -3194,6 +3247,7 @@ service cloud.firestore {
     match /kkbp/allowlist {
       allow read: if request.auth != null;
       allow write: if request.auth != null &&
+        request.auth.token.email_verified &&
         request.auth.token.email in ['${(authInfo?.email || "YOUR-GOOGLE-EMAIL").toLowerCase()}'];
     }
   }
@@ -3387,6 +3441,7 @@ service cloud.firestore {
               ? <><Badge text={authInfo.email} color={C.green} /> <Btn small ghost onClick={googleSignOut}>Switch</Btn></>
               : <><Badge text="not signed in" color={C.amber} /> <Btn small onClick={googleSignIn}>Continue with Google</Btn></>}
           </div>
+          {!authInfo?.email && <EmailAuthMini />}
           <div style={{ marginTop: 12 }}>
             <Field label="Google accounts allowed into the workspace (one per line)">
               <Ta rows={6} value={wlText} onChange={(e) => setWlText(e.target.value)} placeholder={"rishi@kkjpl.com\nnitin@kkjpl.com\nsomeone@gmail.com"} />
@@ -3398,7 +3453,7 @@ service cloud.firestore {
           </div>
           <div style={{ fontSize: 12.5, color: C.mute, marginTop: 14, lineHeight: 1.75 }}>
             <b style={{ color: C.text }}>One-time setup to enforce this:</b><br />
-            1. Firebase console → <b>Authentication → Get started → Sign-in method → Google → Enable</b> → Save.<br />
+            1. Firebase console → <b>Authentication → Sign-in method</b>: enable <b>Google</b> and (for non-Google mails) <b>Email/Password</b>.<br />
             2. Authentication → <b>Settings → Authorized domains</b> → add <b>rishiikothari.github.io</b>.<br />
             3. Here: sign in with Google above, add the team's Google emails, <b>Save access list</b>.<br />
             4. Firestore console → <b>Rules</b> → replace with the rules below → <b>Publish</b>. From that moment only listed accounts can touch the data — with or without the app.
