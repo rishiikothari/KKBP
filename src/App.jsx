@@ -385,6 +385,50 @@ async function emailWorkspaceReset(email) {
   try { const cfg = effectiveFbConfig(); const { app } = await fbApp(cfg); const A = await import("firebase/auth"); await A.sendPasswordResetEmail(A.getAuth(app), email); return "Password-reset link sent — check your inbox."; }
   catch (e) { return "Couldn't send reset: " + ((e && e.message) || e); }
 }
+/* ---------- username seats, backed by Firebase ----------
+   Each username has a hidden Firebase email/password account so that a plain
+   username+passcode login still satisfies the server-side rules and gets full
+   live access. Firebase needs >=6-char passwords, so the seat passcode is
+   wrapped deterministically. */
+const SEAT_DOMAIN = "seat.ttjteamos.app";
+const seatEmail = (username) => `${String(username || "").toLowerCase()}@${SEAT_DOMAIN}`;
+const seatSecret = (pass) => `ttj$${pass}`; /* >=6 chars even for a 4-digit passcode */
+/* Sign the device into Firebase as this seat (creating the hidden account on
+   first use). Returns {ok, created} or {ok:false, msg}. Best-effort: if there
+   is no workspace configured it just no-ops so the app still works offline. */
+async function seatFirebaseSignIn(username, pass) {
+  const cfg = effectiveFbConfig(); if (!cfg) return { ok: true, offline: true };
+  const email = seatEmail(username), secret = seatSecret(pass);
+  try {
+    const A = await warmAuth() ? _authMod : await (async () => { await warmAuth(); return _authMod; })();
+    const auth = _authInst;
+    try {
+      await _authMod.signInWithEmailAndPassword(auth, email, secret);
+      return { ok: true };
+    } catch (e) {
+      const code = (e && e.code) || "";
+      if (code.includes("user-not-found") || code.includes("invalid-credential")) {
+        try { await _authMod.createUserWithEmailAndPassword(auth, email, secret); return { ok: true, created: true }; }
+        catch (e2) {
+          if (((e2 && e2.code) || "").includes("email-already-in-use")) return { ok: false, msg: "wrong-pass" };
+          return { ok: false, msg: (e2 && e2.message) || String(e2) };
+        }
+      }
+      if (code.includes("wrong-password")) return { ok: false, msg: "wrong-pass" };
+      return { ok: false, msg: (e && e.message) || String(e) };
+    }
+  } catch (e) { return { ok: false, msg: (e && e.message) || String(e) }; }
+}
+/* Change the signed-in seat's Firebase password (called on the forced first
+   change and any later change). */
+async function seatChangeFirebasePassword(newPass) {
+  try {
+    await warmAuth();
+    const u = _authInst && _authInst.currentUser;
+    if (u) await _authMod.updatePassword(u, seatSecret(newPass));
+    return true;
+  } catch (e) { console.error("seat pw change (fb)", e); return false; }
+}
 /* Compact email sign-in block used on the login gate and in Team & Access. */
 function EmailAuthMini() {
   const [em, setEm] = useState(""); const [pw, setPw] = useState(""); const [msg, setMsg] = useState(""); const [busy, setBusy] = useState(false);
@@ -694,6 +738,8 @@ function Login({ users, onLogin, onAttempt, liveOn, liveStatus, authInfo }) {
   const [showPw, setShowPw] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [changePw, setChangePw] = useState(null); // { u, oldPw } when a first-login change is required
+  const [np1, setNp1] = useState(""); const [np2, setNp2] = useState("");
   const tryLogin = async () => {
     if (busy) return;
     const uname = un.trim().toLowerCase();
@@ -719,8 +765,18 @@ function Login({ users, onLogin, onAttempt, liveOn, liveStatus, authInfo }) {
         return;
       }
       clearFails(uname);
-      onLogin(u, pw);
+      if (!u.pwChanged) { setChangePw({ u, oldPw: pw }); setNp1(""); setNp2(""); setErr(""); return; } /* compulsory first-login change */
+      await onLogin(u, pw);
     } finally { setBusy(false); }
+  };
+  const submitChange = async () => {
+    if (busy) return;
+    if (np1.length < 6) return setErr("Pick a password of at least 6 characters.");
+    if (np1 !== np2) return setErr("The two passwords don't match.");
+    if (np1 === changePw.oldPw) return setErr("Choose a password different from the default one.");
+    setBusy(true); setErr("");
+    try { await onLogin(changePw.u, changePw.oldPw, { newPassword: np1 }); }
+    finally { setBusy(false); }
   };
   return (
     <div style={{ minHeight: "100vh", background: `radial-gradient(1200px 600px at 70% -10%, #24244E 0%, ${C.bg} 55%)`, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px", fontFamily: SANS }}>
@@ -759,30 +815,51 @@ function Login({ users, onLogin, onAttempt, liveOn, liveStatus, authInfo }) {
           </div>
         )}
 
-        <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, padding: 22 }}>
-          <Field label="Username">
-            <Inp value={un} autoFocus autoCapitalize="none" autoCorrect="off" spellCheck={false}
-              onChange={(e) => { setUn(e.target.value); setErr(""); }}
-              onKeyDown={(e) => e.key === "Enter" && tryLogin()} placeholder="e.g. rishi" />
-          </Field>
-          <div style={{ marginTop: 14 }}>
-            <Field label="Password">
-              <div style={{ position: "relative" }}>
-                <Inp type={showPw ? "text" : "password"} value={pw}
-                  onChange={(e) => { setPw(e.target.value); setErr(""); }}
-                  onKeyDown={(e) => e.key === "Enter" && tryLogin()} placeholder="••••••••" style={{ paddingRight: 38 }} />
-                <Eye size={15} color={showPw ? C.gold : C.faint} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", cursor: "pointer" }} onClick={() => setShowPw(!showPw)} />
-              </div>
+        {changePw ? (
+          <div style={{ background: C.panel, border: `1px solid ${C.gold}66`, borderRadius: 12, padding: 22 }}>
+            <div style={{ fontFamily: SERIF, fontSize: 18, color: C.text }}>Set your password</div>
+            <div style={{ fontSize: 12.5, color: C.mute, marginTop: 6, lineHeight: 1.6 }}>Welcome, {changePw.u.name.split(" ")[0]}. For security, choose your own password before you continue — you'll use it every time from now on.</div>
+            <div style={{ marginTop: 14 }}>
+              <Field label="New password (min 6 characters)"><Inp type={showPw ? "text" : "password"} value={np1} autoFocus onChange={(e) => { setNp1(e.target.value); setErr(""); }} /></Field>
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <Field label="Confirm new password"><Inp type={showPw ? "text" : "password"} value={np2} onChange={(e) => { setNp2(e.target.value); setErr(""); }} onKeyDown={(e) => e.key === "Enter" && submitChange()} /></Field>
+            </div>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, fontSize: 12, color: C.mute, cursor: "pointer" }}>
+              <input type="checkbox" checked={showPw} onChange={(e) => setShowPw(e.target.checked)} /> Show passwords
+            </label>
+            {err && <div style={{ color: C.red, fontSize: 12, marginTop: 12 }}>{err}</div>}
+            <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
+              <Btn onClick={submitChange} disabled={busy || np1.length < 6 || np1 !== np2}>{busy ? <Loader2 size={14} className="spin" /> : <ShieldCheck size={14} />} Set password & continue</Btn>
+              <Btn ghost onClick={() => { setChangePw(null); setPw(""); setErr(""); }}>Back</Btn>
+            </div>
+          </div>
+        ) : (
+          <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, padding: 22 }}>
+            <Field label="Username">
+              <Inp value={un} autoFocus autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                onChange={(e) => { setUn(e.target.value); setErr(""); }}
+                onKeyDown={(e) => e.key === "Enter" && tryLogin()} placeholder="e.g. rishi" />
             </Field>
+            <div style={{ marginTop: 14 }}>
+              <Field label="Password">
+                <div style={{ position: "relative" }}>
+                  <Inp type={showPw ? "text" : "password"} value={pw}
+                    onChange={(e) => { setPw(e.target.value); setErr(""); }}
+                    onKeyDown={(e) => e.key === "Enter" && tryLogin()} placeholder="••••••••" style={{ paddingRight: 38 }} />
+                  <Eye size={15} color={showPw ? C.gold : C.faint} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", cursor: "pointer" }} onClick={() => setShowPw(!showPw)} />
+                </div>
+              </Field>
+            </div>
+            {err && <div style={{ color: C.red, fontSize: 12, marginTop: 12 }}>{err}</div>}
+            <div style={{ marginTop: 18 }}>
+              <Btn onClick={tryLogin} disabled={!un.trim() || !pw || busy}>{busy ? <Loader2 size={14} className="spin" /> : <KeyRound size={14} />} Sign in</Btn>
+            </div>
+            <div style={{ color: C.faint, fontSize: 11, marginTop: 14, lineHeight: 1.6 }}>
+              First time in? Use the passcode the Owner gave you — you'll set your own password next. Email &amp; Google sign-in are above when the workspace asks for it.
+            </div>
           </div>
-          {err && <div style={{ color: C.red, fontSize: 12, marginTop: 12 }}>{err}</div>}
-          <div style={{ marginTop: 18 }}>
-            <Btn onClick={tryLogin} disabled={!un.trim() || !pw || busy}>{busy ? <Loader2 size={14} className="spin" /> : <KeyRound size={14} />} Sign in</Btn>
-          </div>
-          <div style={{ color: C.faint, fontSize: 11, marginTop: 14, lineHeight: 1.6 }}>
-            Usernames and passwords are managed by the Owner under Team &amp; Access. Change the defaults on first run.
-          </div>
-        </div>
+        )}
         <div style={{ textAlign: "center", fontSize: 11, color: liveOn ? C.green : C.faint, marginTop: 14 }}>
           {liveOn ? "● Live shared workspace connected" : "Standalone mode — data stays on this device until the Owner connects the shared workspace."}
         </div>
@@ -3242,8 +3319,11 @@ function Team({ state, setState, user, liveStatus, authInfo }) {
     readAllowlist().then((e) => { setWl(e); setWlText((e || []).join("\n")); });
   }, [canWrite]);
   const saveAllowlist = async () => {
-    const emails = wlText.split(/[\n,;]+/).map((x) => x.trim().toLowerCase()).filter((x) => x.includes("@"));
-    if (authInfo?.email && !emails.includes(authInfo.email.toLowerCase())) emails.unshift(authInfo.email.toLowerCase());
+    const typed = wlText.split(/[\n,;]+/).map((x) => x.trim().toLowerCase()).filter((x) => x.includes("@") && !x.endsWith("@" + SEAT_DOMAIN));
+    /* every username seat's hidden account is always allowed (that's how
+       username+passcode gets in); plus any real Google/email addresses typed. */
+    const seats = (state.users || []).map((u) => seatEmail(u.username));
+    const emails = Array.from(new Set([...(authInfo?.email ? [authInfo.email.toLowerCase()] : []), ...typed, ...seats]));
     setWlBusy(true);
     try {
       await writeAllowlist(emails);
@@ -3257,7 +3337,10 @@ function Team({ state, setState, user, liveStatus, authInfo }) {
 service cloud.firestore {
   match /databases/{database}/documents {
     function verified() {
-      return request.auth != null && request.auth.token.email_verified == true;
+      return request.auth != null && (
+        request.auth.token.email_verified == true ||
+        request.auth.token.email.matches('.*@seat[.]ttjteamos[.]app$')
+      );
     }
     function noListYet() {
       return !exists(/databases/$(database)/documents/kkbp/allowlist);
@@ -3282,7 +3365,7 @@ service cloud.firestore {
     /* a password typed here is stored only as a salted hash */
     if ((edit.newPw || "").length >= 4) {
       const salt = genSalt();
-      rec.pwSalt = salt; rec.pwHash = await hashPassword(edit.newPw, salt); rec.password = "";
+      rec.pwSalt = salt; rec.pwHash = await hashPassword(edit.newPw, salt); rec.password = ""; rec.pwChanged = false; /* admin-set password is temporary — member must change it on next login */
     }
     delete rec.newPw;
     setState((s) => withLog(
@@ -3678,18 +3761,31 @@ export default function App() {
     onAttempt={({ un, ok }) => {
       setState((s) => ({ ...s, loginEvents: [{ ts: Date.now(), un, ok, uid: null, d: DEVICE_ID, ua: uaInfo() }, ...(s.loginEvents || [])].slice(0, 300) }));
     }}
-    onLogin={async (u, pw) => {
+    onLogin={async (u, pw, opts) => {
       const now = Date.now();
-      /* upgrade a legacy plaintext password to a salted hash on first login */
-      let up = null;
-      if (!u.pwHash && pw) { const salt = genSalt(); up = { pwSalt: salt, pwHash: await hashPassword(pw, salt) }; }
+      const changing = !!(opts && opts.newPassword);
+      const finalPass = changing ? opts.newPassword : pw;
+      /* Persist the password as a salted hash and enter the app IMMEDIATELY —
+         login never waits on the network. */
+      const salt = genSalt();
+      const up = { pwSalt: salt, pwHash: await hashPassword(finalPass, salt), password: "", pwChanged: true };
       setState((s) => ({
         ...s,
-        users: up ? s.users.map((x) => x.id === u.id ? { ...x, ...up, password: "" } : x) : s.users,
+        users: s.users.map((x) => x.id === u.id ? { ...x, ...up } : x),
         loginEvents: [{ ts: now, un: u.username, ok: true, uid: u.id, d: DEVICE_ID, ua: uaInfo() }, ...(s.loginEvents || [])].slice(0, 300),
-        sessions: { ...(s.sessions || {}), [`${u.id}|${DEVICE_ID}`]: { u: u.id, d: DEVICE_ID, ua: uaInfo(), em: (authInfo && authInfo.email) || "", in: now, seen: now } },
+        sessions: { ...(s.sessions || {}), [`${u.id}|${DEVICE_ID}`]: { u: u.id, d: DEVICE_ID, ua: uaInfo(), em: (authInfo && authInfo.email) || seatEmail(u.username), in: now, seen: now } },
       }));
-      setUser(u); setPage("overview"); saveSession({ userId: u.id, page: "overview", loginTs: now });
+      const nu = { ...u, ...up };
+      setUser(nu); setPage("overview"); saveSession({ userId: u.id, page: "overview", loginTs: now });
+      /* Bridge this seat to Firebase in the BACKGROUND so username+passcode gets
+         full live access — never blocks the login. On a forced change: sign in
+         with the old passcode (or create the account), then move to the new. */
+      (async () => {
+        try {
+          const r = await seatFirebaseSignIn(u.username, pw);
+          if (r && r.ok && !r.offline && changing) await seatChangeFirebasePassword(opts.newPassword);
+        } catch (e) { console.error("seat firebase bridge", e); }
+      })();
     }} />;
 
   const D = DEPTS[user.dept];
