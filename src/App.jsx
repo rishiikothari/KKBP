@@ -315,7 +315,16 @@ async function getAuthUser(cfg) {
   const A = await import("firebase/auth");
   const auth = A.getAuth(app);
   try { await A.getRedirectResult(auth); } catch (e) {}
-  return await new Promise((res) => { const off = A.onAuthStateChanged(auth, (u) => { off(); res(u); }, () => res(null)); });
+  return await new Promise((res) => {
+    const off = A.onAuthStateChanged(auth, async (u) => {
+      off();
+      /* Force a fresh reload + token so a just-clicked email verification is
+         reflected (the cached token still says unverified otherwise, and the
+         rules keep denying). */
+      if (u) { try { await u.reload(); await u.getIdToken(true); } catch (e) {} }
+      res(u);
+    }, () => res(null));
+  });
 }
 /* Pre-warm the auth module + app so the Google popup can be opened
    synchronously inside the user's tap (Safari blocks popups that open after an
@@ -353,9 +362,10 @@ async function emailWorkspaceSignIn(email, password) {
   const auth = A.getAuth(app);
   try {
     const cred = await A.signInWithEmailAndPassword(auth, email, password);
+    try { await cred.user.reload(); await cred.user.getIdToken(true); } catch (e) {} /* pick up a verification done elsewhere */
     if (!cred.user.emailVerified) {
       try { await A.sendEmailVerification(cred.user); } catch (e) {}
-      return { ok: false, msg: "One step left — we've emailed you a verification link. Open it, then reload this page." };
+      return { ok: false, msg: "Not verified yet — we've re-sent the link to " + email + ". Open it on this device, then tap Sign in again." };
     }
     location.reload(); return { ok: true };
   } catch (e) {
@@ -3246,19 +3256,22 @@ function Team({ state, setState, user, liveStatus, authInfo }) {
   const RULES_TEXT = `rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function allowed() {
-      return request.auth != null &&
-        request.auth.token.email_verified &&
+    function verified() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function noListYet() {
+      return !exists(/databases/$(database)/documents/kkbp/allowlist);
+    }
+    function listed() {
+      return verified() &&
         request.auth.token.email in get(/databases/$(database)/documents/kkbp/allowlist).data.emails;
     }
     match /kkbp/state {
-      allow read, write: if allowed();
+      allow read, write: if verified() && (noListYet() || listed());
     }
     match /kkbp/allowlist {
       allow read: if request.auth != null;
-      allow write: if request.auth != null &&
-        request.auth.token.email_verified &&
-        request.auth.token.email in ['${(authInfo?.email || "YOUR-GOOGLE-EMAIL").toLowerCase()}'];
+      allow write: if verified() && (noListYet() || listed());
     }
   }
 }`;
