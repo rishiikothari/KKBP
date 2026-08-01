@@ -317,19 +317,27 @@ async function getAuthUser(cfg) {
   try { await A.getRedirectResult(auth); } catch (e) {}
   return await new Promise((res) => { const off = A.onAuthStateChanged(auth, (u) => { off(); res(u); }, () => res(null)); });
 }
-async function googleSignIn() {
-  const cfg = effectiveFbConfig(); if (!cfg) return;
-  const { app } = await fbApp(cfg);
-  const A = await import("firebase/auth");
-  const auth = A.getAuth(app);
+/* Pre-warm the auth module + app so the Google popup can be opened
+   synchronously inside the user's tap (Safari blocks popups that open after an
+   await, which then forces the fragile cross-domain redirect flow). */
+let _authMod = null, _authInst = null;
+async function warmAuth() {
+  const cfg = effectiveFbConfig(); if (!cfg) return null;
+  if (!_authMod) { const { app } = await fbApp(cfg); _authMod = await import("firebase/auth"); _authInst = _authMod.getAuth(app); }
+  return _authInst;
+}
+function googleSignIn() {
+  const A = _authMod, auth = _authInst;
+  if (!A || !auth) { warmAuth().then(() => setTimeout(googleSignIn, 0)); return; } /* first tap warms, retries instantly */
   const prov = new A.GoogleAuthProvider();
   prov.setCustomParameters({ prompt: "select_account" });
-  try { await A.signInWithPopup(auth, prov); location.reload(); }
-  catch (e) {
-    const code = (e && e.code) || "";
-    if (/popup|cancelled|blocked/.test(code)) { try { await A.signInWithRedirect(auth, prov); return; } catch (e2) { alert("Google sign-in failed: " + (e2.message || e2)); } }
-    else alert("Google sign-in failed: " + (e.message || e));
-  }
+  A.signInWithPopup(auth, prov)
+    .then(() => location.reload())
+    .catch((e) => {
+      const code = (e && e.code) || "";
+      if (/popup-closed|cancelled-popup|popup-blocked/.test(code)) return; /* user closed it — no scary alert */
+      alert("Google sign-in didn't complete on this browser (common on iPhone/iPad Safari). The most reliable way in is the email option below — it works on every device.");
+    });
 }
 async function googleSignOut() {
   try { const cfg = effectiveFbConfig(); const { app } = await fbApp(cfg); const A = await import("firebase/auth"); await A.signOut(A.getAuth(app)); } catch (e) {}
@@ -670,6 +678,7 @@ const SectionTitle = ({ eyebrow, title, sub, accent }) => (
 
 /* ================= LOGIN ================= */
 function Login({ users, onLogin, onAttempt, liveOn, liveStatus, authInfo }) {
+  useEffect(() => { if (liveStatus === "needauth" || liveStatus === "on") warmAuth(); }, [liveStatus]);
   const [un, setUn] = useState("");
   const [pw, setPw] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -718,11 +727,11 @@ function Login({ users, onLogin, onAttempt, liveOn, liveStatus, authInfo }) {
 
         {liveStatus === "needauth" && (
           <div style={{ background: C.panel, border: `1px solid ${C.gold}55`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
-            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}><b>Join the live workspace</b> — a one-time Google sign-in on this device keeps everything in sync and keeps outsiders out.</div>
-            <div style={{ marginTop: 10 }}><Btn onClick={googleSignIn}><KeyRound size={14} /> Continue with Google</Btn></div>
-            <div style={{ fontSize: 11.5, color: C.mute, marginTop: 12 }}>No Google account? Use your email — first time creates your workspace account (you'll verify it by mail once):</div>
+            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}><b>Join the live workspace</b> — a one-time sign-in on this device keeps everything in sync and keeps outsiders out.</div>
+            <div style={{ fontSize: 11.5, color: C.mute, marginTop: 12 }}>Sign in with your email (first time creates your account — you verify it once by mail):</div>
             <EmailAuthMini />
-            <div style={{ fontSize: 11, color: C.faint, marginTop: 10 }}>Skip it and sign in below to work offline on this device only.</div>
+            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 14, borderTop: `1px solid ${C.lineSoft}`, paddingTop: 12 }}>Have a Google account and not on Safari? <span onClick={googleSignIn} style={{ color: C.gold, cursor: "pointer", textDecoration: "underline" }}>Continue with Google</span> (may not work on iPhone/iPad).</div>
+            <div style={{ fontSize: 11, color: C.faint, marginTop: 10 }}>Or skip and sign in below to work offline on this device only.</div>
           </div>
         )}
         {liveStatus === "denied" && (
@@ -812,7 +821,7 @@ function Overview({ state, setState, user, goTo, liveStatus }) {
               <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 12px", background: `${C.amber}12`, border: `1px solid ${C.amber}44`, borderRadius: 8, marginBottom: 10, fontSize: 12.5, color: C.text, lineHeight: 1.5 }}>
                 <AlertTriangle size={14} color={C.amber} style={{ flexShrink: 0, marginTop: 1 }} />
                 <span><b>Live sync is off on this device</b> — you're seeing this device's data only, not the team's.{" "}
-                  {liveStatus === "needauth" ? <>One-time Google sign-in needed: <Btn small onClick={googleSignIn}>Continue with Google</Btn></>
+                  {liveStatus === "needauth" ? "One-time workspace sign-in needed on this device — open the app\u2019s sign-in screen (sign out and back in) and use the email option."
                     : liveStatus === "denied" ? "This device's Google account isn't on the workspace access list — ask Rishi to add it (Team & Access → Workspace access)."
                     : isAppAdmin(user) ? "Connect the shared workspace in Team & Access to make every device live." : "Ask Rishi to connect the shared workspace."}</span>
               </div>
@@ -3218,6 +3227,7 @@ function Team({ state, setState, user, liveStatus, authInfo }) {
   const [wlBusy, setWlBusy] = useState(false);
   const canWrite = isAppAdmin(user);
   useEffect(() => {
+    warmAuth();
     if (!canWrite) return;
     readAllowlist().then((e) => { setWl(e); setWlText((e || []).join("\n")); });
   }, [canWrite]);
@@ -3729,7 +3739,7 @@ export default function App() {
             <div>
               <div style={{ fontFamily: SERIF, fontSize: 15, color: C.text }}>The Town Junction</div>
               <div style={{ fontSize: 9, color: C.mute, letterSpacing: 1.6, textTransform: "uppercase" }}>Team OS · Karan Kothari Group</div>
-              <div style={{ fontSize: 10, color: liveStatus === "on" ? C.green : C.faint, letterSpacing: 1, textTransform: "uppercase", marginTop: 2 }}>{IS_CLOUD ? "Official channel" : liveStatus === "on" ? "● Live · shared" : liveStatus === "connecting" ? "Connecting…" : liveStatus === "needauth" ? "Google sign-in needed for live" : liveStatus === "denied" ? "Workspace access pending" : liveStatus === "error" ? "Live sync offline" : "Standalone · this device"}</div>
+              <div style={{ fontSize: 10, color: liveStatus === "on" ? C.green : C.faint, letterSpacing: 1, textTransform: "uppercase", marginTop: 2 }}>{IS_CLOUD ? "Official channel" : liveStatus === "on" ? "● Live · shared" : liveStatus === "connecting" ? "Connecting…" : liveStatus === "needauth" ? "Sign in for live sync" : liveStatus === "denied" ? "Workspace access pending" : liveStatus === "error" ? "Live sync offline" : "Standalone · this device"}</div>
             </div>
           </div>
         </div>
