@@ -103,3 +103,11 @@ src/App.jsx                   the entire app (theme, seed data, all pages)
 .github/workflows/deploy.yml  auto-deploy to GitHub Pages
 netlify.toml / vercel.json    zero-config deploys on Netlify / Vercel
 ```
+
+## Bonus: Mecha Chameleon (vertical slice)
+
+`public/mecha-chameleon/index.html` is a self-contained, playable HTML5
+vertical slice of the *Mecha Chameleon* game design document (portrait,
+one-thumb). It ships as a static file — after deploy it is served at
+`/mecha-chameleon/`, or open the file directly in any browser. No build
+step, no dependencies.
