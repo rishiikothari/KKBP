@@ -299,9 +299,10 @@ const clearFails = (un) => { try { const f = loadFails(); delete f[un]; localSto
 let fbDocRef = null, fbSetDoc = null;
 async function connectLive(cfg, onSnap) {
   const { initializeApp } = await import("firebase/app");
-  const { getFirestore, doc, onSnapshot, setDoc } = await import("firebase/firestore");
+  const { initializeFirestore, doc, onSnapshot, setDoc } = await import("firebase/firestore");
   const app = initializeApp(cfg);
-  const db = getFirestore(app);
+  /* auto-detect networks/proxies that break streaming and fall back to long-polling */
+  const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
   fbDocRef = doc(db, "kkbp", "state");
   fbSetDoc = setDoc;
   return onSnapshot(fbDocRef,
@@ -3316,6 +3317,8 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(false);
   const [liveStatus, setLiveStatus] = useState(effectiveFbConfig() ? "connecting" : "off"); // off | connecting | on | error
   const remoteApply = React.useRef(false);
+  const latestState = React.useRef(null);
+  useEffect(() => { latestState.current = state; }, [state]);
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 768);
@@ -3354,39 +3357,34 @@ export default function App() {
         return;
       }
       /* Live mode: wait for the first shared snapshot so a joining device
-         never overwrites the team's data with its own local copy. */
+         never overwrites the team's data with its own local copy. If Firestore
+         answers slower than the fallback (first-ever connection on a slow
+         network), the late snapshot still flips the app live and seeds or
+         adopts the workspace — it is never ignored. */
       let first = true;
       const fallback = setTimeout(() => { if (first) { first = false; setLiveStatus("error"); finishBoot(base, false); } }, 8000);
+      const localNow = () => latestState.current || base;
+      const applyCloud = (cloud) => {
+        if (cloud.dataEpoch !== DATA_EPOCH) { finishBoot(migrateState(resetToCleanSlate(cloud)), false); return; } /* pre-reset data → clean slate, pushed up */
+        /* An empty cloud (freshly seeded by a blank device) must not shadow a
+           device that already holds real records — push the local data up. */
+        if (recordCount(cloud) === 0 && recordCount(localNow()) > 0) { pushLive(localNow()); return; }
+        finishBoot(migrateState({ ...freshState(), ...cloud }), true);
+      };
       try {
         await connectLive(cfg, (msg) => {
           if (msg.error) { clearTimeout(fallback); if (first) { first = false; finishBoot(base, false); } setLiveStatus("error"); return; }
+          clearTimeout(fallback);
+          setLiveStatus("on"); /* any successful snapshot = connected, even one arriving after the fallback */
           if (first) {
             first = false;
-            clearTimeout(fallback);
-            setLiveStatus("on");
-            if (msg.exists) {
-              try {
-                const cloud = JSON.parse(msg.data);
-                if (cloud.dataEpoch === DATA_EPOCH) {
-                  /* An empty cloud (freshly seeded by a blank device) must not
-                     shadow a device that already holds real records — keep the
-                     local data and push it up as the workspace's content. */
-                  if (recordCount(cloud) === 0 && recordCount(base) > 0) { finishBoot(base, false); return; }
-                  finishBoot(migrateState({ ...freshState(), ...cloud }), true); return;
-                }
-                /* shared workspace holds pre-reset data — replace it with the clean slate and push up */
-                finishBoot(migrateState(resetToCleanSlate(cloud)), false); return;
-              } catch (e) {}
-            }
+            if (msg.exists) { try { applyCloud(JSON.parse(msg.data)); return; } catch (e) {} }
             finishBoot(base, false); /* first device ever seeds the shared workspace */
             return;
           }
-          if (msg.by === CLIENT_ID || !msg.exists) return;
-          try {
-            const cloud = JSON.parse(msg.data);
-            if (cloud.dataEpoch !== DATA_EPOCH) return; /* ignore stale snapshots until a device resets them */
-            finishBoot(migrateState({ ...freshState(), ...cloud }), true);
-          } catch (e) {}
+          if (msg.by === CLIENT_ID) return;
+          if (!msg.exists) { pushLive(localNow()); return; } /* late first contact with an empty workspace — seed it */
+          try { applyCloud(JSON.parse(msg.data)); } catch (e) {}
         });
       } catch (e) {
         console.error("live connect failed", e);
