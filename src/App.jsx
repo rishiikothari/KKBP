@@ -61,6 +61,7 @@ const PAGES = [
   { key: "tasks",        label: "Tasks",              icon: ListChecks,      group: "Daily" },
   { key: "approvals",    label: "Approvals",          icon: Stamp,           group: "Daily" },
   { key: "announcements",label: "Announcements",      icon: Bell,            group: "Daily" },
+  { key: "ask",          label: "Ask the OS",         icon: Sparkles,        group: "Daily" },
   { key: "tenants",      label: "Tenants & Leasing",  icon: Store,           group: "Workspaces", depts: ["exec","leasing"] },
   { key: "capex",        label: "Capex & Budgets",    icon: HardHat,         group: "Workspaces", depts: ["exec","project","design"] },
   { key: "works",        label: "Work Schedule",      icon: CalendarDays,    group: "Workspaces", depts: ["exec","project","design"] },
@@ -2769,6 +2770,178 @@ function Analytics({ state }) {
   );
 }
 
+/* ================= ASK THE OS (AI assistant over live workspace data) ================= */
+/* The snapshot mirrors each person's page permissions — a collection is only
+   serialized if the asker could already open its page, so the assistant can
+   never show someone more than the app itself does. Credentials, sessions,
+   login events and emails never enter the snapshot. */
+function buildAiSnapshot(state, user) {
+  const L = [];
+  const push = (s) => { L.push(String(s).length > 150 ? String(s).slice(0, 148) + "…" : String(s)); };
+  const cap = (arr, n = 25) => { const a = arr || []; if (a.length > n) push(` …and ${a.length - n} more (showing latest ${n})`); return a.slice(0, n); };
+  const fin = isFinApprover(user), ext = isExternal(user);
+  const deptOk = (depts) => isExec(user) || depts.includes(user.dept);
+  const openTasks = (state.tasks || []).filter((k) => k.status !== "Done");
+  const pend = (state.approvals || []).filter((p) => p.status === "Pending");
+
+  push(`DATE: ${today()}`);
+  push(`ASKER: ${user.name} | dept:${user.dept} | tier:${user.tier}${isOwner(user) ? " | owner" : ""}${fin ? " | financial approver" : ""}`);
+  push(`COUNTS: tenants:${(state.tenants || []).length} zones:${(state.zones || []).length} capex:${(state.capex || []).length} works:${(state.works || []).length} open-tasks:${openTasks.length} pending-approvals:${pend.length} docs:${(state.docs || []).length} meetings:${(state.meetings || []).length}`);
+
+  push("TEAM ROSTER:");
+  (state.users || []).forEach((u) => push(` ${u.name} | ${u.dept} | ${u.tier}${u.subRole ? " | " + u.subRole.slice(0, 48) : ""}`));
+
+  const anns = [...(state.announcements || [])].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  if (anns.length) { push("ANNOUNCEMENTS (latest):"); cap(anns, 5).forEach((a) => push(` ${a.date} | ${a.title}`)); }
+
+  const mine = openTasks.filter((k) => k.assigneeId === user.id);
+  push(`MY OPEN TASKS (${user.name.split(" ")[0]}):`);
+  if (mine.length) cap(mine, 15).forEach((k) => push(` ${k.title} | due:${k.due || "—"} | ${k.priority} | ${k.status}${isOverdue(k.due, false) ? " | OVERDUE" : ""}`));
+  else push(" none");
+  if (!ext) {
+    push("ALL OPEN TASKS:");
+    cap(openTasks, 25).forEach((k) => push(` ${k.title} | ${uName(state, k.assigneeId)} | due:${k.due || "—"} | ${k.priority}${isOverdue(k.due, false) ? " | OVERDUE" : ""}`));
+  }
+
+  if (deptOk(["leasing"])) {
+    push("TENANTS / RENT ROLL (₹L = lakh per month):");
+    cap(state.tenants, 25).forEach((x) => push(` ${x.name} | ${x.category} | ${x.floor} | ${num(x.area).toLocaleString("en-IN")}sft | ${x.status} | ${x.deal} | ₹${tenantMonthlyL(x).toFixed(1)}L/mo${num(x.capexPsf) ? ` | capex ₹${num(x.capexPsf)}/sft` : ""}`));
+    const totalSft = (state.zones || []).reduce((s, z) => s + (+z.areaSft || 0), 0);
+    const leased = (state.zones || []).filter((z) => { const tn = (state.tenants || []).find((x) => x.id === z.tenantId); return tn && ["Agreement", "Fit-out", "Operational"].includes(tn.status); }).reduce((s, z) => s + (+z.areaSft || 0), 0);
+    if (totalSft) push(`OCCUPANCY: ${leased.toLocaleString("en-IN")} of ${totalSft.toLocaleString("en-IN")} sft leased (${Math.round((leased / totalSft) * 100)}%)`);
+  }
+  if (deptOk(["project", "design"])) {
+    if ((state.capex || []).length) { push("CAPEX PACKAGES (₹L):"); cap(state.capex, 20).forEach((c) => push(` ${c.name} | ${c.category} | budget ${num(c.budgetL)}L | spent ${num(c.spentL)}L | ${c.status} | due:${c.due || "—"}`)); }
+    if ((state.works || []).length) { push("WORK SCHEDULE:"); cap(state.works, 25).forEach((w) => push(` ${w.name} | ${w.trade} | ${w.contractor || "—"} | ${w.start || "?"}→${w.target || "?"} | ${Math.round(num(w.pct))}% | ${w.status}${isOverdue(w.target, w.status === "Done") ? " | OVERDUE" : ""}`)); }
+    const openR = (state.rfis || []).filter((r) => r.status !== "Closed");
+    if (openR.length) { push("OPEN RFIs:"); cap(openR, 10).forEach((r) => push(` ${r.title} | raised:${r.date || "—"}`)); }
+  }
+  if (deptOk(["admin"])) {
+    const openC = (state.compliance || []).filter((c) => c.status !== "Done");
+    if (openC.length) { push("OPEN COMPLIANCE:"); cap(openC, 15).forEach((c) => push(` ${c.name} | ${c.status} | due:${c.due || "—"}`)); }
+  }
+  if (deptOk(["marketing"])) {
+    if ((state.campaigns || []).length) { push("CAMPAIGNS:"); cap(state.campaigns, 10).forEach((c) => push(` ${c.name} | budget ${num(c.budgetL)}L | spent ${num(c.spentL)}L | ${c.status || ""}`)); }
+    const openK = (state.content || []).filter((c) => c.status !== "Published");
+    if (openK.length) { push("CONTENT PIPELINE (unpublished):"); cap(openK, 15).forEach((c) => push(` ${c.title} | ${c.type} | ${c.status} | ${uName(state, c.assigneeId)}`)); }
+  }
+  /* approvals: amounts only for the people who decide them */
+  if (fin) {
+    push("APPROVALS (you decide these):");
+    cap(pend, 15).forEach((p) => push(` PENDING: ${p.title} | ${p.type} | ₹${num(p.amountL)}L | raised by ${uName(state, p.raisedById)} on ${p.dateRaised}${(p.attachments || []).length ? ` | ${p.attachments.length} attachment(s)` : ""}`));
+    cap((state.approvals || []).filter((p) => p.status !== "Pending"), 8).forEach((p) => push(` ${p.status.toUpperCase()}: ${p.title} | ₹${num(p.amountL)}L | by ${uName(state, p.decidedById)} on ${p.dateDecided}`));
+  } else if (!ext) {
+    push(`APPROVALS: ${pend.length} pending (amounts visible to the owners).`);
+    const own = (state.approvals || []).filter((p) => p.raisedById === user.id);
+    cap(own, 8).forEach((p) => push(` yours: ${p.title} | ${p.status}`));
+  }
+  if (!ext) {
+    const ai = (state.meetings || []).filter((m) => m.kind === "ai" && m.summary);
+    if (ai.length) { push("RECENT MEETING SUMMARIES:"); cap(ai, 3).forEach((m) => push(` ${m.date} ${m.title}: ${(m.summary || "").slice(0, 130)}`)); }
+  }
+  if ((state.docs || []).length) { push("DOCUMENTS ON FILE:"); cap(state.docs, 15).forEach((d) => push(` ${d.name} | ${d.category}`)); }
+  if (isOwner(user)) {
+    const recent = (state.audit || []).slice(0, 8);
+    if (recent.length) { push("RECENT TEAM ACTIVITY:"); recent.forEach((a) => push(` ${a.by} ${a.action} ${a.col}/${a.name}${a.fields ? ` (${a.fields})` : ""}`)); }
+  }
+  let out = L.join("\n");
+  if (out.length > 20000) out = out.slice(0, 20000) + "\n[truncated — ask a narrower question]";
+  return out;
+}
+
+const ASK_PROMPT = (snapshot, question) => `You are the operating assistant inside TTJ Team OS — the team dashboard of The Town Junction, a mall under development on Kamptee Road, Nagpur, by the Karan Kothari Group. Amounts use Indian units: L = lakh (₹1,00,000), Cr = crore (₹1,00,00,000); sft = square feet.
+
+Answer the QUESTION using ONLY the DATA below — it is the live workspace, already filtered to what this person is allowed to see. Quote real numbers and names from it. If the data doesn't contain the answer, say so plainly and name what's missing. Be direct and specific; no filler.
+
+Return ONLY valid JSON, no markdown fences, exactly: {"answer": "2-6 sentences, plain language", "followups": ["up to 3 short next questions worth asking"]}
+
+DATA:
+${snapshot}
+
+QUESTION: ${question}`;
+
+const DIGEST_PROMPT = (snapshot) => `You are the operating assistant for The Town Junction (mall development, Nagpur). Below is the live workspace of the owner asking. Write their briefing.
+
+Return ONLY valid JSON: {"answer": "one tight paragraph, 120-180 words: leasing momentum (signed vs pipeline, occupancy), money (capex burn + pending approvals with amounts), site works (progress, anything overdue), and what needs the owners this week. Plain language, real numbers, no headings, no filler.", "followups": []}
+
+DATA:
+${snapshot}`;
+
+function AskOS({ state, user }) {
+  const [q, setQ] = useState("");
+  const [thread, setThread] = useState([]); /* [{q, answer, followups}] — local to this device, never synced */
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const key = (state.aiKey || "").trim();
+  const examples = {
+    exec: ["What needs my decision right now?", "How is leasing tracking against the CMA target?", "Which works are overdue and who owns them?"],
+    leasing: ["Which deals are stuck before agreement?", "What's our occupancy and signed rent roll?", "Which tenants need capex and do they clear the screen?"],
+    project: ["Which work items are overdue?", "How much capex budget is left by category?", "What RFIs are still open?"],
+    design: ["What's the works progress by trade?", "Which drawings or RFIs are pending?", "What's on the programme this month?"],
+    marketing: ["What content is stuck before approval?", "Where are we against campaign budgets?", "What's due from the agency this week?"],
+    admin: ["Which compliance items are open?", "What tasks are overdue in admin?", "What's pending on vendors?"],
+  };
+  const ask = async (question, digest = false) => {
+    const text = (question || "").trim();
+    if (!digest && !text) return;
+    if (!key) return setErr("The team AI key isn't set yet — ask Rishi to add it in Team & Access.");
+    setBusy(true); setErr("");
+    try {
+      const snapshot = buildAiSnapshot(state, user);
+      const prompt = digest ? DIGEST_PROMPT(snapshot) : ASK_PROMPT(snapshot, text);
+      const res = await WA.anthropicJSON({ key, content: [{ type: "text", text: prompt }], max_tokens: 900 });
+      setThread((th) => [{ q: digest ? "Owner digest — where things stand" : text, answer: res.answer || "(no answer)", followups: Array.isArray(res.followups) ? res.followups.slice(0, 3) : [] }, ...th]);
+      setQ("");
+    } catch (e) {
+      const m = (e && e.message) || String(e);
+      setErr(m === "NEED_KEY" ? "The team AI key is missing or invalid — ask Rishi to update it in Team & Access."
+        : m === "RATE_LIMIT" ? "The AI is rate-limited right now — try again in a minute."
+        : "Couldn't get an answer: " + m);
+    } finally { setBusy(false); }
+  };
+  return (
+    <div>
+      <SectionTitle eyebrow="Daily" title="Ask the OS" sub="Ask in plain language — answers come from the live workspace, limited to what you can already see in the app. Nothing you ask is stored or shared." />
+      {!key && (
+        <Card style={{ marginBottom: 14, borderColor: `${C.amber}55` }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12.5, color: C.text, lineHeight: 1.6 }}>
+            <AlertTriangle size={14} color={C.amber} style={{ flexShrink: 0, marginTop: 2 }} />
+            <span>The team AI key isn't set yet{isAppAdmin(user) ? " — add it in Team & Access → AI (one key for the whole team)." : " — ask Rishi to add it in Team & Access. Once set, this page answers for everyone."}</span>
+          </div>
+        </Card>
+      )}
+      <Card style={{ marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Inp value={q} onChange={(e) => { setQ(e.target.value); setErr(""); }} onKeyDown={(e) => e.key === "Enter" && !busy && ask(q)}
+            placeholder="e.g. Which deals are stuck? What's overdue on site? How far to the CMA target?" style={{ flex: "1 1 320px" }} />
+          <Btn onClick={() => ask(q)} disabled={busy || !q.trim() || !key}>{busy ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />} Ask</Btn>
+          {isOwner(user) && <Btn ghost onClick={() => ask("", true)} disabled={busy || !key}><ScrollText size={14} /> Owner digest</Btn>}
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+          {(examples[user.dept] || examples.exec).map((ex) => (
+            <button key={ex} onClick={() => { setQ(ex); setErr(""); }} style={{ fontSize: 11.5, padding: "5px 10px", borderRadius: 6, border: `1px solid ${C.line}`, background: "transparent", color: C.mute, cursor: "pointer", fontFamily: SANS }}>{ex}</button>
+          ))}
+        </div>
+        {err && <div style={{ color: C.amber, fontSize: 12.5, marginTop: 10, lineHeight: 1.5 }}>{err}</div>}
+      </Card>
+      {thread.map((t, i) => (
+        <Card key={i} style={{ marginBottom: 12, ...(t.q.startsWith("Owner digest") ? { borderColor: `${C.gold}55` } : {}) }}>
+          <div style={{ fontSize: 12, color: C.gold, marginBottom: 8 }}>{t.q}</div>
+          <div style={{ fontSize: 13.5, color: C.text, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{t.answer}</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
+            {(t.followups || []).map((f) => (
+              <button key={f} onClick={() => { setQ(f); window.scrollTo({ top: 0, behavior: "smooth" }); }} style={{ fontSize: 11.5, padding: "5px 10px", borderRadius: 6, border: `1px solid ${C.line}`, background: "transparent", color: C.mute, cursor: "pointer", fontFamily: SANS }}>{f} →</button>
+            ))}
+            <div style={{ flex: 1 }} />
+            <Btn small ghost onClick={() => { try { navigator.clipboard.writeText(t.answer); } catch (e) {} }}>Copy</Btn>
+          </div>
+        </Card>
+      ))}
+      {thread.length === 0 && key && <Empty text="Ask anything about tenants, money, works, tasks or approvals — the answer uses the live numbers." />}
+    </div>
+  );
+}
+
 /* ================= DOCUMENTS ================= */
 function Documents({ state, setState, user }) {
   const [edit, setEdit] = useState(null);
@@ -4486,6 +4659,7 @@ export default function App() {
     capex: <Capex state={state} setState={writeState} canWrite={cw("capex")} />,
     works: <Works state={state} setState={writeState} canWrite={cw("works")} />,
     analytics: <Analytics state={state} />,
+    ask: <AskOS state={state} user={user} />,
     marketing: <MarketingStudio state={state} setState={writeState} user={user} />,
     adminops: <AdminOps state={state} setState={writeState} canWrite={cw("adminops")} />,
     drawings: <Drawings state={state} setState={writeState} canWrite={cw("drawings")} />,
