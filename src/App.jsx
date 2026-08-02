@@ -15,15 +15,17 @@ import {
 } from "recharts";
 
 /* ================= THEME ================= */
-/* The Town Junction brand (per the TTJ investment deck): deep midnight navy
-   ground, warm cream type, amber-orange accent, high-contrast serif headlines. */
+/* The Town Junction brand (per the official identity): deep violet ground
+   (brand purple #4B0D9E, darkened for long reading), the orange-gradient
+   globe mark, warm cream type, high-contrast serif headlines. */
+const BRAND_PURPLE = "#4B0D9E";
 const C = {
-  bg: "#13132E", panel: "#1B1B3F", panel2: "#232350", panel3: "#171736",
-  line: "#2F2F5E", lineSoft: "#26264C",
-  gold: "#EC9744", goldDim: "#A86F2E",
-  text: "#F5EFE2", mute: "#A9A6C6", faint: "#6E6C94",
-  green: "#6BBF95", amber: "#E2A54B", red: "#E07862", blue: "#8AA9DB",
-  purple: "#A995DD", teal: "#6FC0BC", rose: "#D08A9B",
+  bg: "#190838", panel: "#231048", panel2: "#2C155C", panel3: "#1E0C42",
+  line: "#3D2280", lineSoft: "#33196C",
+  gold: "#F79A2E", goldDim: "#B4722C",
+  text: "#F7F1E5", mute: "#B3A8D8", faint: "#7C6FAE",
+  green: "#6BC59A", amber: "#E9A94E", red: "#E5765E", blue: "#8FADE3",
+  purple: "#B49AE8", teal: "#6FC5C0", rose: "#D68F9F",
 };
 const SERIF = "'Playfair Display', Georgia, 'Times New Roman', serif";
 const SANS = "-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
@@ -767,26 +769,45 @@ const Ta = (p) => <textarea rows={3} {...p} style={{ ...inputSt, resize: "vertic
 
 /* The Town Junction mark — a mosaic starburst in the brand oranges (an SVG
    approximation of the deck's pixel-sun logo). */
-const TTJMark = ({ size = 40 }) => {
-  const sq = [];
-  const cols = ["#F2A94F", "#EC9744", "#E67E48", "#DE5F45", "#F2B968"];
-  const N = 14;
-  for (let i = 0; i < N; i++) {
-    const a = (i / N) * Math.PI * 2;
-    for (let r = 0; r < 3; r++) {
-      if ((i + r) % 3 === 2 && r === 2) continue;
-      const dist = 11 + r * 9;
-      const s = 6.5 - r * 1.6;
-      sq.push({ x: 50 + Math.cos(a) * dist - s / 2, y: 50 + Math.sin(a) * dist - s / 2, s, c: cols[(i + r * 2) % cols.length], rot: (i * 24 + r * 15) % 90 });
-    }
-  }
-  return (
-    <svg width={size} height={size} viewBox="0 0 100 100" aria-label="The Town Junction">
-      {sq.map((q, i) => <rect key={i} x={q.x} y={q.y} width={q.s} height={q.s} fill={q.c} transform={`rotate(${q.rot} ${q.x + q.s / 2} ${q.y + q.s / 2})`} />)}
-      <circle cx="50" cy="50" r="6.5" fill="none" stroke="#EC9744" strokeWidth="3.4" />
-    </svg>
-  );
+/* The Town Junction globe — the official mark: a checkered sphere of diamond
+   tiles around an eight-point star, gold at the core cooling to red at the
+   rim, dissolving to the left. Drawn from the same geometry as the app icons. */
+const TTJ_STOPS = [[251, 176, 64], [247, 148, 30], [241, 90, 36], [239, 65, 35]];
+const ttjGrad = (t) => {
+  const x = Math.min(0.999, Math.max(0, t)) * (TTJ_STOPS.length - 1);
+  const i = Math.floor(x), f = x - i;
+  const c = TTJ_STOPS[i].map((v, k) => Math.round(v + (TTJ_STOPS[i + 1][k] - v) * f));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
 };
+const TTJ_RINGS = [
+  { r: 16.5, n: 8, s: 10.5, off: 22.5, sq: 1, t: 0 },
+  { r: 22.5, n: 8, s: 6.5, off: 0, sq: 1, t: 0.15 },
+  { r: 26.5, n: 16, s: 6.2, off: 11.25, sq: 1, t: 0.32 },
+  { r: 31.5, n: 16, s: 5.6, off: 0, sq: 1, t: 0.48 },
+  { r: 36, n: 20, s: 4.8, off: 9, sq: 0.92, t: 0.64 },
+  { r: 40, n: 20, s: 4.2, off: 0, sq: 0.84, t: 0.78 },
+  { r: 43.5, n: 24, s: 3.2, off: 7.5, sq: 0.62, t: 0.92 },
+];
+const TTJ_SCATTER = [[47.5, 150], [50.5, 166], [48, 184], [51.5, 200], [47, 132], [50, 216], [54, 176], [53, 148], [56, 192]];
+const TTJ_TILES = (() => {
+  const out = [];
+  for (const g of TTJ_RINGS) for (let i = 0; i < g.n; i++) {
+    const deg = (i * 360) / g.n + g.off, a = (deg * Math.PI) / 180;
+    out.push({ x: 50 + Math.cos(a) * g.r, y: 50 + Math.sin(a) * g.r, w: g.s * g.sq, h: g.s, rot: deg + 45, c: ttjGrad(g.t) });
+  }
+  TTJ_SCATTER.forEach(([r, deg], i) => {
+    const a = (deg * Math.PI) / 180, s = 2 + (i % 3) * 0.6;
+    out.push({ x: 50 + Math.cos(a) * r, y: 50 + Math.sin(a) * r, w: s, h: s, rot: deg + 45, c: ttjGrad(0.96) });
+  });
+  return out;
+})();
+const TTJMark = ({ size = 40 }) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" aria-label="The Town Junction">
+    {TTJ_TILES.map((q, i) => (
+      <rect key={i} x={q.x - q.w / 2} y={q.y - q.h / 2} width={q.w} height={q.h} fill={q.c} transform={`rotate(${q.rot} ${q.x} ${q.y})`} />
+    ))}
+  </svg>
+);
 
 const Modal = ({ title, onClose, children, wide }) => (
   <div style={{ position: "fixed", inset: 0, background: "#000A", zIndex: 50, display: "flex", alignItems: "flex-start", justifyContent: "center", overflowY: "auto", padding: "40px 12px" }} onClick={onClose}>
@@ -876,7 +897,7 @@ function Login({ users, onLogin, onLink, onAttempt, liveOn, liveStatus, authInfo
     finally { setBusy(false); }
   };
   return (
-    <div style={{ minHeight: "100vh", background: `radial-gradient(1200px 600px at 70% -10%, #24244E 0%, ${C.bg} 55%)`, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px", fontFamily: SANS }}>
+    <div style={{ minHeight: "100vh", background: `radial-gradient(1200px 600px at 70% -10%, #3A1580 0%, ${C.bg} 55%)`, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px", fontFamily: SANS }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
         <div style={{ textAlign: "center", marginBottom: 26 }}>
           <div style={{ width: 62, height: 62, margin: "0 auto 14px", display: "flex", alignItems: "center", justifyContent: "center" }}>

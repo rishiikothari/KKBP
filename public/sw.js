@@ -4,7 +4,7 @@
    - the page itself + everything else same-origin: network-first, falling
      back to the last cached copy when offline
    - cross-origin (Firebase, Anthropic, fonts) is never touched. */
-const CACHE = "ttj-v1";
+const CACHE = "ttj-v2"; /* bump on icon/brand changes — icon paths don't carry content hashes */
 
 self.addEventListener("install", () => self.skipWaiting());
 
