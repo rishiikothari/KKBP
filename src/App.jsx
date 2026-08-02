@@ -4355,6 +4355,12 @@ service cloud.firestore {
 }
 
 /* ================= APP SHELL ================= */
+/* Installed-app detection: hide the install hint once TTJ runs from the home
+   screen. iPadOS masquerades as a Mac, so touch points are checked too. */
+const IS_STANDALONE = typeof window !== "undefined" && ((window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true);
+const IS_IOS = typeof navigator !== "undefined" && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
+const HINT_KEY = "ttj-install-hint-dismissed";
+
 export default function App() {
   const [state, setState] = useState(null);
   const [user, setUser] = useState(null);
@@ -4363,6 +4369,16 @@ export default function App() {
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
   const [navOpen, setNavOpen] = useState(false);
   const [liveStatus, setLiveStatus] = useState(effectiveFbConfig() ? "connecting" : "off"); // off | connecting | on | error | needauth | denied
+  /* install-to-home-screen: Android fires beforeinstallprompt (one-tap
+     install); iPhone/iPad get Share → Add to Home Screen instructions */
+  const [installEvt, setInstallEvt] = useState(null);
+  const [installHint, setInstallHint] = useState(() => { try { return !IS_STANDALONE && !localStorage.getItem(HINT_KEY); } catch (e) { return false; } });
+  useEffect(() => {
+    const h = (e) => { e.preventDefault(); setInstallEvt(e); };
+    window.addEventListener("beforeinstallprompt", h);
+    return () => window.removeEventListener("beforeinstallprompt", h);
+  }, []);
+  const dismissHint = () => { setInstallHint(false); try { localStorage.setItem(HINT_KEY, "1"); } catch (e) {} };
   const [authInfo, setAuthInfo] = useState(null); // { email, uid } once signed in via Firebase
   const [authNoSeat, setAuthNoSeat] = useState(null); // email string when signed in but not linked to any seat
   const remoteApply = React.useRef(false);
@@ -4754,6 +4770,21 @@ export default function App() {
         </div>
       </div>
       <div style={{ flex: 1, minWidth: 0, padding: isMobile ? "64px 14px 60px" : "26px 26px 60px" }}>
+        {installHint && isMobile && (
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 14, padding: "11px 14px", background: `${C.gold}12`, border: `1px solid ${C.gold}44`, borderRadius: 10, fontSize: 12.5, color: C.text, lineHeight: 1.55 }}>
+            <TTJMark size={26} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <b>Put TTJ on your home screen</b> — opens full-screen like an app, one tap from anywhere.
+              <div style={{ color: C.mute, marginTop: 3 }}>
+                {installEvt ? "Tap Install and you're done."
+                  : IS_IOS ? <>In Safari: tap the <b>Share</b> button (□↑) → <b>Add to Home Screen</b> → Add.</>
+                  : <>In Chrome: menu <b>⋮</b> → <b>Add to Home screen</b> / <b>Install app</b>.</>}
+              </div>
+              {installEvt && <div style={{ marginTop: 8 }}><Btn small onClick={async () => { try { installEvt.prompt(); await installEvt.userChoice; } catch (e) {} setInstallEvt(null); dismissHint(); }}>Install TTJ</Btn></div>}
+            </div>
+            <X size={15} color={C.mute} title="Dismiss" style={{ cursor: "pointer", flexShrink: 0, marginTop: 2 }} onClick={dismissHint} />
+          </div>
+        )}
         {isExternal(user) && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18, padding: "10px 14px", background: `${C.blue}14`, border: `1px solid ${C.blue}44`, borderRadius: 10, fontSize: 12.5, color: C.mute, lineHeight: 1.5 }}>
             <Eye size={15} color={C.blue} style={{ flexShrink: 0 }} />
