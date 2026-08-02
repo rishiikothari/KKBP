@@ -567,6 +567,28 @@ const freshState = () => ({
    from shadowing a device that already carries real data. */
 const RECORD_COLS = ["tenants","capex","works","campaigns","content","compliance","vendors","drawings","rfis","zones","tasks","approvals","announcements","meetings","docs"];
 const recordCount = (st) => RECORD_COLS.reduce((n, k) => n + ((st && st[k]) || []).length, 0);
+/* When this device holds edits the cloud hasn't accepted yet (a flaky-network
+   burst) and a remote snapshot lands, merge instead of adopting: per record,
+   the newer `_m` edit-stamp wins, so neither device's work is thrown away.
+   Known limit: a record deleted remotely while we were dirty re-appears if our
+   copy is newer — a rare race we accept in a whole-doc sync model. */
+const mergeDirty = (remote, local) => {
+  const out = { ...remote };
+  for (const col of RECORD_COLS) {
+    const r = remote[col] || [], l = local[col] || [];
+    if (!l.length) { out[col] = r; continue; }
+    const byId = new Map(r.map((x) => [x.id, x]));
+    for (const x of l) {
+      const cur = byId.get(x.id);
+      if (!cur || (x._m || 0) > (cur._m || 0)) byId.set(x.id, x);
+    }
+    out[col] = Array.from(byId.values());
+  }
+  const akey = (a) => `${a.ts}|${a.byId || ""}|${a.col}|${a.name}`;
+  const seen = new Set((remote.audit || []).map(akey));
+  out.audit = [...(local.audit || []).filter((a) => !seen.has(akey(a))), ...(remote.audit || [])].sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 500);
+  return out;
+};
 /* Fresh workspace, but carry forward the shared AI key (a credential, not sample
    data) so a reset doesn't knock the AI Notetaker offline for everyone. */
 const resetToCleanSlate = (prev) => {
@@ -865,7 +887,11 @@ function Login({ users, onLogin, onLink, onAttempt, liveOn, liveStatus, authInfo
 
         {authNoSeat && (
           <div style={{ background: C.panel, border: `1px solid ${C.red}66`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
-            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}>You're signed in as <b>{authNoSeat}</b>, but that email isn't linked to a team member yet. Ask Rishi to add it to your profile (Team &amp; Access), or sign in with your username instead.</div>
+            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}>
+              {authNoSeat.includes("(unverified)")
+                ? <>Your email <b>{authNoSeat.replace(" (unverified)", "")}</b> hasn't been verified yet — open the verification link we mailed you, then sign in again.</>
+                : <>You're signed in as <b>{authNoSeat}</b>, but that email isn't linked to a team member yet. Ask Rishi to add it to your profile (Team &amp; Access), or sign in with your username instead.</>}
+            </div>
             <div style={{ marginTop: 10 }}><Btn ghost onClick={googleSignOut}>Sign out / use another account</Btn></div>
           </div>
         )}
@@ -2745,7 +2771,7 @@ function MeetingStudio({ state, setState, user }) {
     const rec = {
       id: mid, kind: "ai", title: meta.title || "Untitled meeting", date: today(), dept: meta.dept,
       participantIds: meta.participantIds, guests: meta.guests, recordedById: user.id,
-      duration: fmtClock(elapsed), transcript: transcriptDraft,
+      duration: fmtClock(elapsed), transcript: (transcriptDraft || "").slice(0, 30000), /* cap: transcripts are the main shared-doc size risk */
       summary: proposal?.summary || "", decisions: proposal?.decisions || [],
       risks: proposal?.risks || [], highlights: proposal?.highlights || [], actionTaskIds: newTasks.map((t) => t.id),
     };
@@ -3156,6 +3182,9 @@ function SecurityPage({ state, setState, user, liveStatus }) {
         <KPI label="Sessions on record" value={sessions.length} sub="devices that signed in" tone={C.blue} />
         <KPI label="Failed sign-ins (24h)" value={fails24.length} sub={`${events.filter((e) => e.ok && now - e.ts < 86400000).length} successful`} tone={fails24.length ? C.amber : C.faint} />
         <KPI label="Alerts" value={flags.length} sub="suspicious patterns" tone={flags.length ? C.red : C.faint} />
+        {(() => { const kb = Math.round(JSON.stringify(state).length / 1024); return (
+          <KPI label="Workspace size" value={`${kb}KB`} sub={kb > 700 ? "nearing the 1MB sync limit — trim" : "of ~1MB live-sync limit"} tone={kb > 700 ? C.amber : C.faint} />
+        ); })()}
       </div>
 
       <Card title="Suspicious activity" style={{ marginBottom: 12 }}>
@@ -3628,7 +3657,11 @@ service cloud.firestore {
     if (confirm("Remove this member's access?")) setState((s) => ({ ...s, users: s.users.filter((u) => u.id !== id) }));
   };
   const exportJson = () => {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    /* never write a readable passcode to a plain file; salted hashes stay so
+       a re-imported backup keeps everyone's login working (dropping them
+       would make migrate fall back to a known default passcode — worse) */
+    const clean = { ...state, users: state.users.map((u) => (u.password ? { ...u, password: "" } : u)) }; /* the boot sweep has already hashed every passcode */
+    const blob = new Blob([JSON.stringify(clean, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `kkbp-teamos-${today()}.json`;
@@ -3882,6 +3915,58 @@ export default function App() {
   const latestState = React.useRef(null);
   useEffect(() => { latestState.current = state; }, [state]);
 
+  /* ---------- sync reliability: retry queue for failed live pushes ----------
+     A failed push no longer vanishes after one attempt: the edit is queued,
+     retried with backoff (2s → 30s cap), flushed the moment the network
+     returns or the workspace reconnects, and surfaced as an amber "not yet
+     synced" line so nobody believes an unsaved change reached the team. */
+  const [unsynced, setUnsynced] = useState(false);
+  const [stateBytes, setStateBytes] = useState(0);
+  const pendingLive = React.useRef(false);
+  const retryTimer = React.useRef(null);
+  const retryDelay = React.useRef(2000);
+  const flushLive = React.useCallback(async () => {
+    if (!pendingLive.current || !latestState.current) return;
+    const ok = await pushLive(latestState.current);
+    if (ok) { pendingLive.current = false; retryDelay.current = 2000; setUnsynced(false); }
+    else {
+      clearTimeout(retryTimer.current);
+      retryTimer.current = setTimeout(flushLive, retryDelay.current);
+      retryDelay.current = Math.min(30000, retryDelay.current * 2);
+    }
+  }, []);
+  const queueLive = React.useCallback(() => {
+    pendingLive.current = true; setUnsynced(true);
+    clearTimeout(retryTimer.current);
+    retryTimer.current = setTimeout(flushLive, retryDelay.current);
+  }, [flushLive]);
+  useEffect(() => {
+    const onOnline = () => flushLive();
+    window.addEventListener("online", onOnline);
+    return () => { window.removeEventListener("online", onOnline); clearTimeout(retryTimer.current); };
+  }, [flushLive]);
+  useEffect(() => { if (liveStatus === "on") flushLive(); }, [liveStatus, flushLive]);
+
+  /* ---------- one-shot hardening: no plaintext passcodes at rest ----------
+     Seed users carry a starter passcode in plaintext until first login; hash
+     any that remain so neither localStorage nor the shared doc ever stores a
+     readable passcode. verifyPassword prefers the hash, and seat-linking uses
+     the passcode the member types — so nothing else changes. */
+  const hardened = React.useRef(false);
+  useEffect(() => {
+    if (!state || hardened.current) return;
+    const plain = (state.users || []).filter((u) => u.password && !u.pwHash);
+    if (!plain.length) return;
+    hardened.current = true;
+    (async () => {
+      const ups = {};
+      for (const u of plain) { const salt = genSalt(); ups[u.id] = { pwSalt: salt, pwHash: await hashPassword(u.password, salt), password: "" }; }
+      setState((s) => withLog(
+        { ...s, users: s.users.map((u) => (ups[u.id] && u.password && !u.pwHash) ? { ...u, ...ups[u.id] } : u) },
+        "System", "hardened stored passcodes — hashed, plaintext removed"));
+    })();
+  }, [state]);
+
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", onResize);
@@ -3929,7 +4014,18 @@ export default function App() {
          works offline until the user signs in (one time per device). */
       let authUser = null;
       try { authUser = await getAuthUser(cfg); } catch (e) { console.error("auth init failed", e); }
-      if (authUser) { setAuthInfo({ email: authUser.email || "", uid: authUser.uid }); authEmail = authUser.email || null; }
+      if (authUser) {
+        const em = (authUser.email || "").toLowerCase();
+        if (em && !authUser.emailVerified && !em.endsWith("@" + SEAT_DOMAIN)) {
+          /* an unverified email session must not become an identity — the
+             Firestore rules already deny it server-side; mirror that here
+             instead of letting it open the locally-cached workspace */
+          setAuthNoSeat(em + " (unverified)");
+        } else {
+          setAuthInfo({ email: authUser.email || "", uid: authUser.uid });
+          authEmail = authUser.email || null;
+        }
+      }
       /* No Google session? Still try to connect: while the rules are open this
          works and nothing is disrupted. Once the strict rules are published,
          the deny below asks this device for its one-time Google sign-in. */
@@ -3946,7 +4042,15 @@ export default function App() {
         /* An empty cloud (freshly seeded by a blank device) must not shadow a
            device that already holds real records — push the local data up. */
         if (recordCount(cloud) === 0 && recordCount(localNow()) > 0) { pushLive(localNow()); return; }
-        finishBoot(migrateState({ ...freshState(), ...cloud }), true);
+        let next = migrateState({ ...freshState(), ...cloud });
+        /* Un-pushed local edits? Merge them in (newer edit wins per record)
+           instead of letting the remote copy silently erase them. */
+        if (pendingLive.current && latestState.current) {
+          next = migrateState(mergeDirty(next, latestState.current));
+          pendingLive.current = false; retryDelay.current = 2000; setUnsynced(false);
+          pushLive(next);
+        }
+        finishBoot(next, true);
       };
       try {
         await connectLive(cfg, (msg) => {
@@ -3978,7 +4082,13 @@ export default function App() {
     if (remoteApply.current) { remoteApply.current = false; saveState(state); return; } /* cache remote copy locally, don't echo it back */
     const t = setTimeout(async () => {
       const okLocal = await saveState(state);
-      const okLive = liveStatus === "on" ? await pushLive(state) : true;
+      setStateBytes(JSON.stringify(state).length); /* shared-doc size meter (Firestore caps at ~1MB) */
+      let okLive = true;
+      if (liveStatus === "on") {
+        okLive = await pushLive(state);
+        if (!okLive) queueLive();            /* keep retrying until it lands */
+        else if (pendingLive.current) { pendingLive.current = false; retryDelay.current = 2000; setUnsynced(false); } /* a newer push carried the backlog */
+      }
       setSaveTick(okLocal && okLive ? "✓ Saved" : "⚠ Save failed");
       setTimeout(() => setSaveTick(""), 2000);
     }, 600);
@@ -4072,10 +4182,18 @@ export default function App() {
      actor and device — no page can skip the trail. */
   const writeState = (updater) => {
     setState((s) => {
-      const next = typeof updater === "function" ? updater(s) : updater;
+      let next = typeof updater === "function" ? updater(s) : updater;
       if (!next || next === s || !user) return next;
       let entries = auditDiff(s, next, user);
       if (!entries.length) return next;
+      /* stamp each changed record with an edit time so a dirty-device merge
+         (mergeDirty) can keep the newer of two conflicting edits */
+      const stamp = Date.now();
+      for (const col of RECORD_COLS) {
+        if (!Array.isArray(next[col]) || next[col] === s[col]) continue;
+        const old = new Map((s[col] || []).map((r) => [r.id, r]));
+        next = { ...next, [col]: next[col].map((r) => (old.get(r.id) === r ? r : { ...r, _m: stamp })) };
+      }
       if (entries.length > 50) entries = [{ ts: Date.now(), by: user.name, byId: user.id, d: DEVICE_ID, col: "bulk", action: "bulk change", name: `${entries.length} records (import / merge / replace)`, fields: "" }];
       return { ...next, audit: [...entries, ...(next.audit || [])].slice(0, 500) };
     });
@@ -4173,7 +4291,10 @@ export default function App() {
               setUser(null);
             }} title="Sign out" />
           </div>
-          <div style={{ fontSize: 10, color: saveTick.includes("⚠") ? C.red : C.green, marginTop: 8, height: 12 }}>{saveTick}</div>
+          {unsynced
+            ? <div style={{ fontSize: 10, color: C.amber, marginTop: 8 }}>● Changes not yet synced — retrying…</div>
+            : <div style={{ fontSize: 10, color: saveTick.includes("⚠") ? C.red : C.green, marginTop: 8, height: 12 }}>{saveTick}</div>}
+          {stateBytes > 700000 && <div style={{ fontSize: 10, color: C.amber, marginTop: 4 }}>Workspace data is {Math.round(stateBytes / 1024)}KB — nearing the 1MB sync limit. Trim old records soon.</div>}
         </div>
       </div>
       <div style={{ flex: 1, minWidth: 0, padding: isMobile ? "64px 14px 60px" : "26px 26px 60px" }}>
