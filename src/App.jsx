@@ -18,7 +18,7 @@ import {
 /* The Town Junction brand (per the official identity): deep violet ground
    (brand purple #4B0D9E, darkened for long reading), the orange-gradient
    globe mark, warm cream type, high-contrast serif headlines. */
-const BRAND_PURPLE = "#4B0D9E";
+const BRAND_PURPLE = "#3F0099"; /* sampled from the official logo file */
 const C = {
   bg: "#190838", panel: "#231048", panel2: "#2C155C", panel3: "#1E0C42",
   line: "#3D2280", lineSoft: "#33196C",
@@ -769,48 +769,16 @@ const Ta = (p) => <textarea rows={3} {...p} style={{ ...inputSt, resize: "vertic
 
 /* The Town Junction mark — a mosaic starburst in the brand oranges (an SVG
    approximation of the deck's pixel-sun logo). */
-/* The Town Junction globe — the official mark: a checkered sphere of diamond
-   tiles around an eight-point star, gold at the core cooling to red at the
-   rim, dissolving to the left. Drawn from the same geometry as the app icons. */
-const TTJ_STOPS = [[251, 176, 64], [247, 148, 30], [241, 90, 36], [239, 65, 35]];
-const ttjGrad = (t) => {
-  const x = Math.min(0.999, Math.max(0, t)) * (TTJ_STOPS.length - 1);
-  const i = Math.floor(x), f = x - i;
-  const c = TTJ_STOPS[i].map((v, k) => Math.round(v + (TTJ_STOPS[i + 1][k] - v) * f));
-  return `rgb(${c[0]},${c[1]},${c[2]})`;
-};
-const TTJ_RINGS = [
-  { r: 16.5, n: 8, s: 10.5, off: 22.5, sq: 1, t: 0 },
-  { r: 22.5, n: 8, s: 6.5, off: 0, sq: 1, t: 0.15 },
-  { r: 26.5, n: 16, s: 6.2, off: 11.25, sq: 1, t: 0.32 },
-  { r: 31.5, n: 16, s: 5.6, off: 0, sq: 1, t: 0.48 },
-  { r: 36, n: 20, s: 4.8, off: 9, sq: 0.92, t: 0.64 },
-  { r: 40, n: 20, s: 4.2, off: 0, sq: 0.84, t: 0.78 },
-  { r: 43.5, n: 24, s: 3.2, off: 7.5, sq: 0.62, t: 0.92 },
-];
-const TTJ_SCATTER = [[47.5, 150], [50.5, 166], [48, 184], [51.5, 200], [47, 132], [50, 216], [54, 176], [53, 148], [56, 192]];
-const TTJ_TILES = (() => {
-  const out = [];
-  for (const g of TTJ_RINGS) for (let i = 0; i < g.n; i++) {
-    const deg = (i * 360) / g.n + g.off, a = (deg * Math.PI) / 180;
-    out.push({ x: 50 + Math.cos(a) * g.r, y: 50 + Math.sin(a) * g.r, w: g.s * g.sq, h: g.s, rot: deg + 45, c: ttjGrad(g.t) });
-  }
-  TTJ_SCATTER.forEach(([r, deg], i) => {
-    const a = (deg * Math.PI) / 180, s = 2 + (i % 3) * 0.6;
-    out.push({ x: 50 + Math.cos(a) * r, y: 50 + Math.sin(a) * r, w: s, h: s, rot: deg + 45, c: ttjGrad(0.96) });
-  });
-  return out;
-})();
+/* The Town Junction globe — the official logo file itself (cropped square,
+   pixels untouched), shown as a rounded brand-purple tile. The same crop is
+   the app icon on every platform, so the mark is identical everywhere. */
 const TTJMark = ({ size = 40 }) => (
-  <svg width={size} height={size} viewBox="0 0 100 100" aria-label="The Town Junction">
-    {TTJ_TILES.map((q, i) => (
-      <rect key={i} x={q.x - q.w / 2} y={q.y - q.h / 2} width={q.w} height={q.h} fill={q.c} transform={`rotate(${q.rot} ${q.x} ${q.y})`} />
-    ))}
-  </svg>
+  <img src={`${import.meta.env.BASE_URL}brand/ttj-globe.png`} width={size} height={size} alt="The Town Junction"
+    style={{ display: "block", borderRadius: Math.max(6, Math.round(size * 0.22)), flexShrink: 0 }} />
 );
 
 const Modal = ({ title, onClose, children, wide }) => (
-  <div style={{ position: "fixed", inset: 0, background: "#000A", zIndex: 50, display: "flex", alignItems: "flex-start", justifyContent: "center", overflowY: "auto", padding: "40px 12px" }} onClick={onClose}>
+  <div style={{ position: "fixed", inset: 0, background: "#000A", zIndex: 50, display: "flex", alignItems: "flex-start", justifyContent: "center", overflowY: "auto", padding: "calc(env(safe-area-inset-top, 0px) + 40px) 12px calc(env(safe-area-inset-bottom, 0px) + 40px)" }} onClick={onClose}>
     <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 12, width: "100%", maxWidth: wide ? 760 : 560 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: `1px solid ${C.line}` }}>
         <div style={{ fontFamily: SERIF, fontSize: 16, color: C.text }}>{title}</div>
@@ -897,7 +865,7 @@ function Login({ users, onLogin, onLink, onAttempt, liveOn, liveStatus, authInfo
     finally { setBusy(false); }
   };
   return (
-    <div style={{ minHeight: "100vh", background: `radial-gradient(1200px 600px at 70% -10%, #3A1580 0%, ${C.bg} 55%)`, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px", fontFamily: SANS }}>
+    <div style={{ minHeight: "100vh", background: `radial-gradient(1200px 600px at 70% -10%, #3A1580 0%, ${C.bg} 55%)`, display: "flex", alignItems: "center", justifyContent: "center", padding: "calc(env(safe-area-inset-top, 0px) + 40px) 20px calc(env(safe-area-inset-bottom, 0px) + 40px)", fontFamily: SANS }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
         <div style={{ textAlign: "center", marginBottom: 26 }}>
           <div style={{ width: 62, height: 62, margin: "0 auto 14px", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -4716,16 +4684,20 @@ export default function App() {
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: SANS, display: "flex" }}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}} .spin{animation:spin 1s linear infinite}`}</style>
       {isMobile && (
+        /* installed-app phones draw content under the status bar — keep the
+           burger below the clock/notch via the safe-area inset */
         <button onClick={() => setNavOpen(true)} aria-label="Open menu" style={{
-          position: "fixed", top: 12, left: 12, zIndex: 30, display: "flex", alignItems: "center", justifyContent: "center",
-          width: 40, height: 40, borderRadius: 10, background: C.panel2, border: `1px solid ${C.line}`, cursor: "pointer",
-        }}><Menu size={18} color={C.gold} /></button>
+          position: "fixed", top: "calc(env(safe-area-inset-top, 0px) + 10px)", left: "calc(env(safe-area-inset-left, 0px) + 12px)", zIndex: 30,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          width: 42, height: 42, borderRadius: 11, background: C.panel2, border: `1px solid ${C.line}`, cursor: "pointer",
+          boxShadow: "0 2px 14px #00000055",
+        }}><Menu size={19} color={C.gold} /></button>
       )}
       {isMobile && navOpen && <div onClick={() => setNavOpen(false)} style={{ position: "fixed", inset: 0, background: "#000A", zIndex: 39 }} />}
       <div style={{
         width: 226, flexShrink: 0, background: C.panel3, borderRight: `1px solid ${C.line}`, display: "flex", flexDirection: "column",
         ...(isMobile
-          ? { position: "fixed", left: 0, top: 0, bottom: 0, zIndex: 40, transform: navOpen ? "translateX(0)" : "translateX(-105%)", transition: "transform .25s ease", boxShadow: navOpen ? "0 0 40px #000A" : "none" }
+          ? { position: "fixed", left: 0, top: 0, bottom: 0, zIndex: 40, transform: navOpen ? "translateX(0)" : "translateX(-105%)", transition: "transform .25s ease", boxShadow: navOpen ? "0 0 40px #000A" : "none", paddingTop: "env(safe-area-inset-top, 0px)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }
           : { position: "sticky", top: 0, height: "100vh" }),
       }}>
         <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${C.lineSoft}` }}>
@@ -4790,7 +4762,7 @@ export default function App() {
           {stateBytes > 700000 && <div style={{ fontSize: 10, color: C.amber, marginTop: 4 }}>Workspace data is {Math.round(stateBytes / 1024)}KB — nearing the 1MB sync limit. Trim old records soon.</div>}
         </div>
       </div>
-      <div style={{ flex: 1, minWidth: 0, padding: isMobile ? "64px 14px 60px" : "26px 26px 60px" }}>
+      <div style={{ flex: 1, minWidth: 0, padding: isMobile ? "calc(env(safe-area-inset-top, 0px) + 64px) 14px calc(env(safe-area-inset-bottom, 0px) + 60px)" : "26px 26px 60px" }}>
         {installHint && isMobile && (
           <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 14, padding: "11px 14px", background: `${C.gold}12`, border: `1px solid ${C.gold}44`, borderRadius: 10, fontSize: 12.5, color: C.text, lineHeight: 1.55 }}>
             <TTJMark size={26} />
