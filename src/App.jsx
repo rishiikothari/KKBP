@@ -389,6 +389,28 @@ async function emailWorkspaceReset(email) {
   try { const cfg = effectiveFbConfig(); const { app } = await fbApp(cfg); const A = await import("firebase/auth"); await A.sendPasswordResetEmail(A.getAuth(app), email); return "Password-reset link sent — check your inbox."; }
   catch (e) { return "Couldn't send reset: " + ((e && e.message) || e); }
 }
+/* Open a Google popup during seat-linking and return the chosen email (no reload). */
+async function googlePopupEmail() {
+  await warmAuth();
+  const A = _authMod, auth = _authInst;
+  const prov = new A.GoogleAuthProvider(); prov.setCustomParameters({ prompt: "select_account" });
+  const res = await A.signInWithPopup(auth, prov);
+  return res.user && res.user.email;
+}
+/* Create (or reuse) the real email/password account a seat is being linked to,
+   and send its verification mail. */
+async function createEmailAccount(email, password) {
+  await warmAuth();
+  const A = _authMod, auth = _authInst;
+  try { const cred = await A.createUserWithEmailAndPassword(auth, email, password); try { await A.sendEmailVerification(cred.user); } catch (e) {} return { created: true }; }
+  catch (e) {
+    if (((e && e.code) || "").includes("email-already-in-use")) {
+      try { const c = await A.signInWithEmailAndPassword(auth, email, password); if (!c.user.emailVerified) await A.sendEmailVerification(c.user); } catch (e2) {}
+      return { existed: true };
+    }
+    throw e;
+  }
+}
 /* ---------- username seats, backed by Firebase ----------
    Each username has a hidden Firebase email/password account so that a plain
    username+passcode login still satisfies the server-side rules and gets full
@@ -748,15 +770,16 @@ const SectionTitle = ({ eyebrow, title, sub, accent }) => (
 
 
 /* ================= LOGIN ================= */
-function Login({ users, onLogin, onAttempt, liveOn, liveStatus, authInfo, authNoSeat }) {
+function Login({ users, onLogin, onLink, onAttempt, liveOn, liveStatus, authInfo, authNoSeat }) {
   useEffect(() => { if (liveStatus === "needauth" || liveStatus === "on") warmAuth(); }, [liveStatus]);
   const [un, setUn] = useState("");
   const [pw, setPw] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const [changePw, setChangePw] = useState(null); // { u, oldPw } when a first-login change is required
-  const [np1, setNp1] = useState(""); const [np2, setNp2] = useState("");
+  const [linkStep, setLinkStep] = useState(null); // { u, oldPw } — one-time seat claim: link email/Google
+  const [linkEmail, setLinkEmail] = useState(""); const [linkPass, setLinkPass] = useState("");
+  const [linkMsg, setLinkMsg] = useState("");
   const tryLogin = async () => {
     if (busy) return;
     const uname = un.trim().toLowerCase();
@@ -769,6 +792,9 @@ function Login({ users, onLogin, onAttempt, liveOn, liveStatus, authInfo, authNo
     setBusy(true);
     try {
       const u = users.find((x) => (x.username || "").toLowerCase() === uname);
+      /* Username+passcode is one-time setup only. Once a seat is linked to an
+         email/Google, it can only be opened that way. */
+      if (u && u.linked) { setErr(`This account now signs in with ${u.email || "your linked email"} — use Google or email above.`); setPw(""); return; }
       const ok = u && !u.locked && (await verifyPassword(u, pw));
       if (!ok) {
         const n = recordFail(uname);
@@ -777,22 +803,31 @@ function Login({ users, onLogin, onAttempt, liveOn, liveStatus, authInfo, authNo
           ? "This account is locked. Contact the Owner to restore access."
           : n >= 5
           ? "Too many failed attempts. This device is locked for 15 minutes."
-          : `Incorrect username or password.${n >= 3 ? ` ${5 - n} attempt${5 - n === 1 ? "" : "s"} left before a 15-minute lock.` : ""}`);
+          : `Incorrect username or passcode.${n >= 3 ? ` ${5 - n} attempt${5 - n === 1 ? "" : "s"} left before a 15-minute lock.` : ""}`);
         setPw("");
         return;
       }
       clearFails(uname);
-      if (!u.pwChanged) { setChangePw({ u, oldPw: pw }); setNp1(""); setNp2(""); setErr(""); return; } /* compulsory first-login change */
-      await onLogin(u, pw);
+      setLinkStep({ u, oldPw: pw }); setLinkEmail(""); setLinkPass(""); setLinkMsg(""); setErr(""); /* → claim & link */
+    } finally { setBusy(false); }
+  };
+  const doLink = async (provider) => {
+    if (busy) return;
+    if (provider === "email") {
+      if (!linkEmail.includes("@")) return setLinkMsg("Enter the email you'll sign in with.");
+      if (linkPass.length < 6) return setLinkMsg("Set a password of at least 6 characters.");
+    }
+    setBusy(true); setLinkMsg("Linking…");
+    try {
+      await onLink(linkStep.u, linkStep.oldPw, provider === "email" ? { provider: "email", email: linkEmail.trim(), password: linkPass } : { provider: "google" });
+    } catch (e) {
+      setLinkMsg((provider === "google" && /popup|cancel/.test((e && e.code) || "")) ? "Google sign-in was cancelled." : "Couldn't link: " + ((e && e.message) || e));
     } finally { setBusy(false); }
   };
   const submitChange = async () => {
     if (busy) return;
-    if (np1.length < 6) return setErr("Pick a password of at least 6 characters.");
-    if (np1 !== np2) return setErr("The two passwords don't match.");
-    if (np1 === changePw.oldPw) return setErr("Choose a password different from the default one.");
     setBusy(true); setErr("");
-    try { await onLogin(changePw.u, changePw.oldPw, { newPassword: np1 }); }
+    try { await onLogin(linkStep.u, linkStep.oldPw); }
     finally { setBusy(false); }
   };
   return (
@@ -815,24 +850,24 @@ function Login({ users, onLogin, onAttempt, liveOn, liveStatus, authInfo, authNo
           </div>
         )}
 
-        {changePw ? (
+        {linkStep ? (
           <div style={{ background: C.panel, border: `1px solid ${C.gold}66`, borderRadius: 12, padding: 22 }}>
-            <div style={{ fontFamily: SERIF, fontSize: 18, color: C.text }}>Set your password</div>
-            <div style={{ fontSize: 12.5, color: C.mute, marginTop: 6, lineHeight: 1.6 }}>Welcome, {changePw.u.name.split(" ")[0]}. For security, choose your own password before you continue — you'll use it every time from now on.</div>
-            <div style={{ marginTop: 14 }}>
-              <Field label="New password (min 6 characters)"><Inp type={showPw ? "text" : "password"} value={np1} autoFocus onChange={(e) => { setNp1(e.target.value); setErr(""); }} /></Field>
+            <div style={{ fontFamily: SERIF, fontSize: 18, color: C.text }}>Set up {linkStep.u.name.split(" ")[0]}'s login</div>
+            <div style={{ fontSize: 12.5, color: C.mute, marginTop: 6, lineHeight: 1.6 }}>Passcode confirmed. Now link the email or Google account you'll use from now on — after this, <b>this account only opens with that email/Google</b>, not the passcode.</div>
+            <div style={{ marginTop: 16 }}>
+              <Btn onClick={() => doLink("google")} disabled={busy}>{busy ? <Loader2 size={14} className="spin" /> : <KeyRound size={14} />} Link with Google</Btn>
             </div>
-            <div style={{ marginTop: 12 }}>
-              <Field label="Confirm new password"><Inp type={showPw ? "text" : "password"} value={np2} onChange={(e) => { setNp2(e.target.value); setErr(""); }} onKeyDown={(e) => e.key === "Enter" && submitChange()} /></Field>
-            </div>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, fontSize: 12, color: C.mute, cursor: "pointer" }}>
-              <input type="checkbox" checked={showPw} onChange={(e) => setShowPw(e.target.checked)} /> Show passwords
+            <div style={{ fontSize: 11.5, color: C.mute, margin: "14px 0 6px", borderTop: `1px solid ${C.lineSoft}`, paddingTop: 12 }}>Or link an email you'll sign in with (you'll verify it once by mail):</div>
+            <Field label="Your email"><Inp value={linkEmail} autoCapitalize="none" inputMode="email" onChange={(e) => { setLinkEmail(e.target.value); setLinkMsg(""); }} placeholder="you@company.com" /></Field>
+            <div style={{ marginTop: 10 }}><Field label="Choose a password (min 6)"><Inp type={showPw ? "text" : "password"} value={linkPass} onChange={(e) => { setLinkPass(e.target.value); setLinkMsg(""); }} /></Field></div>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12, color: C.mute, cursor: "pointer" }}>
+              <input type="checkbox" checked={showPw} onChange={(e) => setShowPw(e.target.checked)} /> Show password
             </label>
-            {err && <div style={{ color: C.red, fontSize: 12, marginTop: 12 }}>{err}</div>}
-            <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
-              <Btn onClick={submitChange} disabled={busy || np1.length < 6 || np1 !== np2}>{busy ? <Loader2 size={14} className="spin" /> : <ShieldCheck size={14} />} Set password & continue</Btn>
-              <Btn ghost onClick={() => { setChangePw(null); setPw(""); setErr(""); }}>Back</Btn>
+            <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Btn onClick={() => doLink("email")} disabled={busy || !linkEmail.includes("@") || linkPass.length < 6}>{busy ? <Loader2 size={14} className="spin" /> : <ShieldCheck size={14} />} Link this email</Btn>
+              <Btn ghost onClick={() => { setLinkStep(null); setPw(""); setErr(""); }}>Back</Btn>
             </div>
+            {linkMsg && <div style={{ color: linkMsg === "Linking…" ? C.mute : C.amber, fontSize: 12, marginTop: 12, lineHeight: 1.5 }}>{linkMsg}</div>}
           </div>
         ) : (
           <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, padding: 22 }}>
@@ -3332,7 +3367,10 @@ function Team({ state, setState, user, liveStatus, authInfo }) {
     /* every username seat's hidden account is always allowed (that's how
        username+passcode gets in); plus any real Google/email addresses typed. */
     const seats = (state.users || []).map((u) => seatEmail(u.username));
-    const emails = Array.from(new Set([...(authInfo?.email ? [authInfo.email.toLowerCase()] : []), ...typed, ...seats]));
+    /* every real email a member has linked to their seat stays authorized, so a
+       re-save of the list can never lock a linked member out. */
+    const linked = (state.users || []).map((u) => (u.email || "").toLowerCase()).filter((e) => e.includes("@"));
+    const emails = Array.from(new Set([...(authInfo?.email ? [authInfo.email.toLowerCase()] : []), ...typed, ...seats, ...linked]));
     setWlBusy(true);
     try {
       await writeAllowlist(emails);
@@ -3614,6 +3652,14 @@ service cloud.firestore {
               <Inp value={edit.newPw || ""} onChange={(e) => setEdit({ ...edit, newPw: e.target.value })} placeholder={edit.id ? "••••••••" : ""} />
             </Field>
           </div>
+          {edit.id && edit.linked && (
+            <div style={{ marginTop: 14, padding: "11px 13px", background: `${C.amber}12`, border: `1px solid ${C.amber}44`, borderRadius: 8, fontSize: 12.5, color: C.text, lineHeight: 1.55 }}>
+              <b>Signs in with {edit.email || "a linked email/Google"}.</b> The username + passcode no longer opens this seat. If they lost access to that email, un-link to let them set it up again with the passcode below.
+              <div style={{ marginTop: 9 }}>
+                <Btn small ghost onClick={() => setEdit({ ...edit, linked: false, newPw: "" })}><KeyRound size={12} /> Un-link — allow passcode setup again</Btn>
+              </div>
+            </div>
+          )}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
             <Btn ghost onClick={() => setEdit(null)}>Cancel</Btn>
             <Btn onClick={save} disabled={!edit.name || !(edit.username || "").trim() || (!edit.id && (edit.newPw || "").length < 4) || ((edit.newPw || "").length > 0 && edit.newPw.length < 4)}>Save member</Btn>
@@ -3784,31 +3830,39 @@ export default function App() {
     onAttempt={({ un, ok }) => {
       setState((s) => ({ ...s, loginEvents: [{ ts: Date.now(), un, ok, uid: null, d: DEVICE_ID, ua: uaInfo() }, ...(s.loginEvents || [])].slice(0, 300) }));
     }}
-    onLogin={async (u, pw, opts) => {
+    onLink={async (u, oldPw, opts) => {
       const now = Date.now();
-      const changing = !!(opts && opts.newPassword);
-      const finalPass = changing ? opts.newPassword : pw;
-      /* Persist the password as a salted hash and enter the app IMMEDIATELY —
-         login never waits on the network. */
-      const salt = genSalt();
-      const up = { pwSalt: salt, pwHash: await hashPassword(finalPass, salt), password: "", pwChanged: true };
+      /* One-time seat claim → link an email/Google that becomes the only way in.
+         Do the linkage writes while signed into the seat's (allowlisted)
+         account so they persist even before the real email is authorized. */
+      await seatFirebaseSignIn(u.username, oldPw);
+      let email = "";
+      if (opts.provider === "email") email = (opts.email || "").trim().toLowerCase();
+      else { email = ((await googlePopupEmail()) || "").toLowerCase(); await seatFirebaseSignIn(u.username, oldPw); }
+      if (!email || !email.includes("@")) throw new Error("Couldn't read the email to link.");
+      if (state.users.some((x) => x.id !== u.id && (x.email || "").toLowerCase() === email)) throw new Error("That email is already linked to another member.");
+      const up = { email, linked: true, pwChanged: true };
+      const cur = latestState.current || state;
+      const next = { ...cur, users: cur.users.map((x) => x.id === u.id ? { ...x, ...up } : x) };
+      try { await pushLive(next); } catch (e) {}                              /* persist linkage as the seat */
+      try { const al = (await readAllowlist()) || []; if (!al.map((x) => (x || "").toLowerCase()).includes(email)) await writeAllowlist([...al, email]); } catch (e) {}
+      if (opts.provider === "email") { try { await createEmailAccount(email, opts.password); } catch (e) {} }
       setState((s) => ({
         ...s,
         users: s.users.map((x) => x.id === u.id ? { ...x, ...up } : x),
         loginEvents: [{ ts: now, un: u.username, ok: true, uid: u.id, d: DEVICE_ID, ua: uaInfo() }, ...(s.loginEvents || [])].slice(0, 300),
+        sessions: { ...(s.sessions || {}), [`${u.id}|${DEVICE_ID}`]: { u: u.id, d: DEVICE_ID, ua: uaInfo(), em: email, in: now, seen: now } },
+      }));
+      setUser({ ...u, ...up }); setPage("overview"); saveSession({ userId: u.id, page: "overview", loginTs: now });
+    }}
+    onLogin={async (u, pw) => {
+      const now = Date.now();
+      setState((s) => ({
+        ...s,
+        loginEvents: [{ ts: now, un: u.username, ok: true, uid: u.id, d: DEVICE_ID, ua: uaInfo() }, ...(s.loginEvents || [])].slice(0, 300),
         sessions: { ...(s.sessions || {}), [`${u.id}|${DEVICE_ID}`]: { u: u.id, d: DEVICE_ID, ua: uaInfo(), em: (authInfo && authInfo.email) || seatEmail(u.username), in: now, seen: now } },
       }));
-      const nu = { ...u, ...up };
-      setUser(nu); setPage("overview"); saveSession({ userId: u.id, page: "overview", loginTs: now });
-      /* Bridge this seat to Firebase in the BACKGROUND so username+passcode gets
-         full live access — never blocks the login. On a forced change: sign in
-         with the old passcode (or create the account), then move to the new. */
-      (async () => {
-        try {
-          const r = await seatFirebaseSignIn(u.username, pw);
-          if (r && r.ok && !r.offline && changing) await seatChangeFirebasePassword(opts.newPassword);
-        } catch (e) { console.error("seat firebase bridge", e); }
-      })();
+      setUser(u); setPage("overview"); saveSession({ userId: u.id, page: "overview", loginTs: now });
     }} />;
 
   const D = DEPTS[user.dept];
