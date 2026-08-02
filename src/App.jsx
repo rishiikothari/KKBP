@@ -1337,7 +1337,10 @@ function Approvals({ state, setState, user, liveStatus }) {
     setState((s) => withLog({ ...s, approvals: [rec, ...s.approvals] }, user.name, `raised approval “${rec.title}”${rec.amountL ? ` (${fmtL(rec.amountL)})` : ""}${rec.attachments.length ? ` with ${rec.attachments.length} attachment${rec.attachments.length === 1 ? "" : "s"}` : ""}`));
     setEdit(null);
   };
-  const groups = [["Pending", state.approvals.filter((p) => p.status === "Pending")], ["Decided", state.approvals.filter((p) => p.status !== "Pending")]];
+  /* Constitution §7: money stays inside the house — external partners see
+     only the requests they raised themselves, never the rest of the ledger. */
+  const visible = isExternal(user) ? state.approvals.filter((p) => p.raisedById === user.id) : state.approvals;
+  const groups = [["Pending", visible.filter((p) => p.status === "Pending")], ["Decided", visible.filter((p) => p.status !== "Pending")]];
   return (
     <div>
       <SectionTitle eyebrow="Daily" title="Approvals" sub="Money and deviations move only through this page. Every request — any amount, any type — is decided by an Owner: Rishi, Nitin or Arjun (§4). A verbal yes is not an approval." />
