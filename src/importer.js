@@ -112,6 +112,24 @@ export async function downscaleImage(blob, maxDim = 1120) {
   } finally { URL.revokeObjectURL(url); }
 }
 
+// Downscale to a JPEG *Blob* for a storage upload (downscaleImage above
+// returns base64 for the vision API). On any failure, the original blob is
+// returned unchanged so an odd format still uploads.
+export async function downscaleImageBlob(blob, maxDim = 1600, quality = 0.85) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale)), h = Math.max(1, Math.round(img.height * scale));
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    c.getContext("2d").drawImage(img, 0, 0, w, h);
+    const out = await new Promise((res) => c.toBlob(res, "image/jpeg", quality));
+    return out || blob;
+  } catch (e) {
+    return blob;
+  } finally { URL.revokeObjectURL(url); }
+}
+
 /* ---------- video → sampled keyframes (the browser decodes; we grab frames) ---------- */
 
 export async function sampleVideoFrames(blob, frames = 4, maxDim = 1120) {

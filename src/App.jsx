@@ -1221,7 +1221,106 @@ function Tasks({ state, setState, user }) {
 
 /* ================= APPROVALS ================= */
 const requiredApprover = () => ({ text: "Owner — Rishi / Nitin / Arjun", color: C.gold });
-function Approvals({ state, setState, user }) {
+/* ---------- approval attachments (quotes, invoices, photos, drawings) ----------
+   Files go to Firebase Storage; only tiny {name,url,type,size} refs live in the
+   shared state (the whole workspace is one ~1MB Firestore doc — never base64).
+   When the live workspace is off or an upload fails, a paste-a-link row keeps
+   the flow moving. */
+function AttachInput({ items, onChange, folder, live }) {
+  const fileRef = React.useRef(null);
+  const [prog, setProg] = useState(null);   /* null | 0..1 */
+  const [err, setErr] = useState("");
+  const [lnName, setLnName] = useState(""); const [lnUrl, setLnUrl] = useState("");
+  const canUpload = live && !!effectiveFbConfig();
+  const pick = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (!files.length) return;
+    setErr("");
+    let next = [...(items || [])];
+    for (const f of files) {
+      try {
+        setProg(0);
+        const blob = f.type.startsWith("image/") ? await WA.downscaleImageBlob(f) : f;
+        if (blob.size > 15 * 1024 * 1024) { setErr(`${f.name} is over 15MB — link it from Drive instead.`); continue; }
+        const url = await WA.uploadToStorage(effectiveFbConfig(), `approvals/${folder}/${Date.now()}-${f.name.replace(/[^\w.\-]+/g, "_")}`, blob, (p) => setProg(p));
+        next = [...next, { id: uid(), name: f.name, url, type: f.type || "file", size: blob.size }];
+        onChange(next);
+      } catch (ex) {
+        setErr(`Couldn't upload ${f.name} — paste a Drive link below instead.`);
+      }
+    }
+    setProg(null);
+  };
+  const addLink = () => {
+    if (!/^https?:\/\//.test(lnUrl.trim())) return setErr("Paste a full link starting with https://");
+    onChange([...(items || []), { id: uid(), name: lnName.trim() || lnUrl.trim().slice(0, 60), url: lnUrl.trim(), type: "link", size: 0 }]);
+    setLnName(""); setLnUrl(""); setErr("");
+  };
+  const remove = (id) => onChange((items || []).filter((a) => a.id !== id));
+  return (
+    <div style={{ marginTop: 12, borderTop: `1px solid ${C.lineSoft}`, paddingTop: 12 }}>
+      <div style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: C.mute, marginBottom: 8 }}>Attachments — quote, invoice, photo, drawing</div>
+      {(items || []).length > 0 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          {items.map((a) => (
+            <span key={a.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: C.text, background: C.panel3, border: `1px solid ${C.line}`, borderRadius: 7, padding: "5px 9px", maxWidth: 240 }}>
+              {a.type.startsWith("image/") ? <ImageIcon size={12} color={C.gold} /> : a.type === "link" ? <LinkIcon size={12} color={C.blue} /> : <FileText size={12} color={C.gold} />}
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</span>
+              <X size={12} color={C.red} style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => remove(a.id)} />
+            </span>
+          ))}
+        </div>
+      )}
+      <input ref={fileRef} type="file" multiple accept="image/*,application/pdf" style={{ display: "none" }} onChange={pick} />
+      {canUpload ? (
+        <Btn small ghost onClick={() => fileRef.current && fileRef.current.click()} disabled={prog !== null}>
+          {prog !== null ? <Loader2 size={13} className="spin" /> : <Upload size={13} />} {prog !== null ? `Uploading… ${Math.round(prog * 100)}%` : "Attach image / PDF"}
+        </Btn>
+      ) : (
+        <div style={{ fontSize: 11.5, color: C.amber, marginBottom: 8 }}>Live workspace is off on this device — attach by link instead.</div>
+      )}
+      <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <Inp value={lnName} onChange={(e) => setLnName(e.target.value)} placeholder="Name (optional)" style={{ width: 140 }} />
+        <Inp value={lnUrl} onChange={(e) => { setLnUrl(e.target.value); setErr(""); }} placeholder="https:// Drive / link" style={{ flex: "1 1 180px" }} />
+        <Btn small ghost onClick={addLink} disabled={!lnUrl.trim()}><LinkIcon size={12} /> Add link</Btn>
+      </div>
+      {err && <div style={{ fontSize: 11.5, color: C.amber, marginTop: 8 }}>{err}</div>}
+    </div>
+  );
+}
+function AttachList({ items }) {
+  const [lightbox, setLightbox] = useState(null);
+  if (!items || !items.length) return null;
+  const imgs = items.filter((a) => (a.type || "").startsWith("image/"));
+  const rest = items.filter((a) => !(a.type || "").startsWith("image/"));
+  return (
+    <div style={{ marginTop: 9 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        {imgs.map((a) => (
+          <img key={a.id} src={a.url} alt={a.name} title={a.name} loading="lazy"
+            style={{ height: 64, borderRadius: 6, border: `1px solid ${C.line}`, cursor: "pointer", objectFit: "cover", maxWidth: 110 }}
+            onClick={() => setLightbox(a)} />
+        ))}
+        {rest.map((a) => (
+          <a key={a.id} href={a.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: C.text, background: C.panel3, border: `1px solid ${C.line}`, borderRadius: 7, padding: "6px 10px", textDecoration: "none", maxWidth: 240 }}>
+            {a.type === "link" ? <LinkIcon size={12} color={C.blue} /> : <FileText size={12} color={C.gold} />}
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</span>
+            {a.size > 0 && <span style={{ color: C.faint, fontSize: 10.5, flexShrink: 0 }}>{WA.humanSize(a.size)}</span>}
+          </a>
+        ))}
+      </div>
+      {lightbox && (
+        <Modal title={lightbox.name} onClose={() => setLightbox(null)} wide>
+          <img src={lightbox.url} alt={lightbox.name} style={{ maxWidth: "100%", maxHeight: "70vh", display: "block", margin: "0 auto", borderRadius: 8 }} />
+          <div style={{ textAlign: "right", marginTop: 10 }}><a href={lightbox.url} target="_blank" rel="noreferrer" style={{ color: C.gold, fontSize: 12.5 }}>Open full size ↗</a></div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function Approvals({ state, setState, user, liveStatus }) {
   const [edit, setEdit] = useState(null);
   /* Every financial approval — any amount, any type — is decided only by an
      Owner: Rishi, Nitin or Arjun (§4). Heads raise and prepare; they do not clear money. */
@@ -1230,8 +1329,9 @@ function Approvals({ state, setState, user }) {
     { ...s, approvals: s.approvals.map((x) => (x.id === p.id ? { ...x, status, decidedById: user.id, dateDecided: today() } : x)) },
     user.name, `${status.toLowerCase()} “${p.title}”${p.amountL ? ` (${fmtL(p.amountL)})` : ""}`));
   const save = () => {
-    const rec = { ...edit, id: uid(), raisedById: user.id, status: "Pending", decidedById: null, dateRaised: today(), dateDecided: "" };
-    setState((s) => withLog({ ...s, approvals: [rec, ...s.approvals] }, user.name, `raised approval “${rec.title}”${rec.amountL ? ` (${fmtL(rec.amountL)})` : ""}`));
+    const { _draftId, ...rest } = edit;
+    const rec = { ...rest, id: _draftId || uid(), attachments: edit.attachments || [], raisedById: user.id, status: "Pending", decidedById: null, dateRaised: today(), dateDecided: "" };
+    setState((s) => withLog({ ...s, approvals: [rec, ...s.approvals] }, user.name, `raised approval “${rec.title}”${rec.amountL ? ` (${fmtL(rec.amountL)})` : ""}${rec.attachments.length ? ` with ${rec.attachments.length} attachment${rec.attachments.length === 1 ? "" : "s"}` : ""}`));
     setEdit(null);
   };
   const groups = [["Pending", state.approvals.filter((p) => p.status === "Pending")], ["Decided", state.approvals.filter((p) => p.status !== "Pending")]];
@@ -1239,7 +1339,7 @@ function Approvals({ state, setState, user }) {
     <div>
       <SectionTitle eyebrow="Daily" title="Approvals" sub="Money and deviations move only through this page. Every request — any amount, any type — is decided by an Owner: Rishi, Nitin or Arjun (§4). A verbal yes is not an approval." />
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-        <Btn onClick={() => setEdit({ title: "", type: APPROVAL_TYPES[0], amountL: 0, dept: isExec(user) ? "project" : user.dept, notes: "" })}><Send size={14} /> Raise request</Btn>
+        <Btn onClick={() => setEdit({ _draftId: uid(), title: "", type: APPROVAL_TYPES[0], amountL: 0, dept: isExec(user) ? "project" : user.dept, notes: "", attachments: [] })}><Send size={14} /> Raise request</Btn>
       </div>
       {groups.map(([label, list]) => (
         <div key={label} style={{ marginBottom: 18 }}>
@@ -1261,6 +1361,7 @@ function Approvals({ state, setState, user }) {
                         {p.status !== "Pending" && <> · <span style={{ color: p.status === "Approved" ? C.green : C.red }}>{p.status}</span> by {uName(state, p.decidedById)} on {p.dateDecided}</>}
                       </div>
                       {p.notes && <div style={{ fontSize: 12, color: C.mute, marginTop: 5, lineHeight: 1.5 }}>{p.notes}</div>}
+                      <AttachList items={p.attachments} />
                     </div>
                     <div style={{ textAlign: "right" }}>
                       {p.amountL > 0 && <div style={{ fontFamily: SERIF, fontSize: 20, color: C.gold, ...NUM }}>{fmtL(p.amountL)}</div>}
@@ -1293,6 +1394,7 @@ function Approvals({ state, setState, user }) {
             </Field>
           </div>
           <div style={{ marginTop: 12 }}><Field label="Justification / notes"><Ta value={edit.notes} onChange={(e) => setEdit({ ...edit, notes: e.target.value })} /></Field></div>
+          <AttachInput items={edit.attachments} onChange={(a) => setEdit((cur) => ({ ...cur, attachments: typeof a === "function" ? a(cur.attachments) : a }))} folder={edit._draftId} live={liveStatus === "on"} />
           <div style={{ fontSize: 12, color: C.mute, marginTop: 10 }}>Routing: <Badge text={requiredApprover(edit).text} color={requiredApprover(edit).color} /></div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
             <Btn ghost onClick={() => setEdit(null)}>Cancel</Btn>
@@ -3606,6 +3708,16 @@ function Team({ state, setState, user, liveStatus, authInfo }) {
     } catch (e) { alert("Couldn't save the access list: " + (e.message || e)); }
     setWlBusy(false);
   };
+  const STORAGE_RULES_TEXT = `rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 15 * 1024 * 1024;
+    }
+  }
+}`;
   const RULES_TEXT = `rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -3853,6 +3965,15 @@ service cloud.firestore {
           </div>
           <div style={{ fontSize: 11.5, color: C.faint, marginTop: 10, lineHeight: 1.6 }}>
             The admin line in the rules is pinned to your signed-in Google account — only you can change the access list, even among owners. Devices without an allowed Google sign-in keep working offline but never see team data.
+          </div>
+          <div style={{ marginTop: 14, borderTop: `1px solid ${C.lineSoft}`, paddingTop: 12 }}>
+            <div style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>Storage rules (for approval attachments &amp; imported media)</div>
+            <div style={{ fontSize: 11.5, color: C.mute, marginTop: 4, lineHeight: 1.6 }}>Publish once in Firebase console → <b>Storage → Rules</b> so only signed-in team accounts can upload or read files (15MB cap per file):</div>
+            <div style={{ marginTop: 8 }}>
+              <pre style={{ background: C.panel3, border: `1px solid ${C.line}`, borderRadius: 8, padding: 12, fontSize: 11, color: C.text, overflowX: "auto", lineHeight: 1.5 }}>{STORAGE_RULES_TEXT}</pre>
+              <Btn small ghost onClick={() => { try { navigator.clipboard.writeText(STORAGE_RULES_TEXT); alert("Storage rules copied — paste into Storage → Rules and Publish."); } catch (e) { alert("Copy failed — select the text manually."); } }}>Copy storage rules</Btn>
+            </div>
+            <div style={{ fontSize: 11, color: C.faint, marginTop: 8, lineHeight: 1.5 }}>Note: a file's download link contains its own access token — anyone the link is forwarded to can open that one file. Fine for quotes and site photos; don't attach anything you wouldn't email.</div>
           </div>
         </Card>
       )}
@@ -4202,7 +4323,7 @@ export default function App() {
   const Current = {
     overview: <Overview state={state} setState={writeState} user={user} goTo={setPage} liveStatus={liveStatus} />,
     tasks: <Tasks state={state} setState={writeState} user={user} />,
-    approvals: <Approvals state={state} setState={writeState} user={user} />,
+    approvals: <Approvals state={state} setState={writeState} user={user} liveStatus={liveStatus} />,
     announcements: <Announcements state={state} setState={writeState} user={user} />,
     tenants: <Tenants state={state} setState={writeState} canWrite={cw("tenants")} />,
     capex: <Capex state={state} setState={writeState} canWrite={cw("capex")} />,
