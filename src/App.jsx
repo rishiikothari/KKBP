@@ -11,6 +11,7 @@ import {
 import * as WA from "./importer.js";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
+  LineChart, Line, Legend, ReferenceLine,
 } from "recharts";
 
 /* ================= THEME ================= */
@@ -67,6 +68,7 @@ const PAGES = [
   { key: "adminops",     label: "Admin & Compliance", icon: ClipboardCheck,  group: "Workspaces", depts: ["exec","admin"] },
   { key: "drawings",     label: "Drawings & RFIs",    icon: DraftingCompass, group: "Workspaces", depts: ["exec","project","design"] },
   { key: "layout",       label: "Mall Layout",        icon: Layers,          group: "Property" },
+  { key: "analytics",    label: "Analytics",          icon: Activity,        group: "Property", heads: true },
   { key: "documents",    label: "Documents",          icon: FolderOpen,      group: "Records" },
   { key: "meetings",     label: "Meetings & AI Notes", icon: NotebookPen,     group: "Records" },
   { key: "constitution", label: "Constitution",       icon: ScrollText,      group: "Records" },
@@ -77,7 +79,7 @@ const PAGES = [
 /* `owner: true` pages (settings — team, API key, live workspace, security,
    import) are visible only to the app administrator (Rishi). Other pages
    follow the department gate. */
-const pageAllowed = (p, u) => (!p.owner || isAppAdmin(u)) && (!p.depts || p.depts.includes(u.dept));
+const pageAllowed = (p, u) => (!p.owner || isAppAdmin(u)) && (!p.depts || p.depts.includes(u.dept)) && (!p.heads || isExec(u) || isHead(u));
 
 /* Registers each dept can WRITE. Externals never write registers (they act on tasks/content assigned to them). */
 const WRITE_DEPT = {
@@ -2612,6 +2614,161 @@ function MarketingStudio({ state, setState, user }) {
   );
 }
 
+/* ================= ANALYTICS & PROJECTIONS (read-only, exec + heads) ================= */
+const chartTooltip = { contentStyle: { background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 8, fontSize: 12, fontFamily: SANS }, labelStyle: { color: C.text }, itemStyle: { color: C.mute } };
+function Analytics({ state }) {
+  const roiCfg = state.roiCfg || ROI_DEFAULTS;
+  const t = state.tenants || [], zones = state.zones || [], capex = state.capex || [], works = state.works || [];
+  const SIGNED = ["Agreement", "Fit-out", "Operational"];
+  const signed = t.filter((x) => SIGNED.includes(x.status));
+  const totalSft = zones.reduce((s, z) => s + (+z.areaSft || 0), 0);
+  const leasedSft = zones.filter((z) => { const tn = t.find((x) => x.id === z.tenantId); return tn && SIGNED.includes(tn.status); }).reduce((s, z) => s + (+z.areaSft || 0), 0);
+  const occPct = totalSft ? Math.round((leasedSft / totalSft) * 100) : 0;
+  const rentNow = signed.reduce((s, x) => s + tenantMonthlyL(x), 0);
+  /* full occupancy: signed rent + vacant sft priced at the blended achieved
+     rate; before any deal is signed, the CMA target anchors the number */
+  const achievedPsf = leasedSft > 0 ? (rentNow * 1e5) / leasedSft : 0;
+  const rentFull = achievedPsf > 0 ? rentNow + ((totalSft - leasedSft) * achievedPsf) / 1e5 : CMA_TARGET_L;
+  const capexBudget = capex.reduce((s, c) => s + (+c.budgetL || 0), 0);
+  const capexSpent = capex.reduce((s, c) => s + (+c.spentL || 0), 0);
+  const worksPct = works.length ? Math.round(works.reduce((s, w) => s + Math.min(100, Math.max(0, num(w.pct))), 0) / works.length) : null;
+
+  /* 24-month revenue ramp: each pipeline stage switches on after a
+     conservative lag; base escalates yearly per the ROI assumptions */
+  const LAG = { Operational: 0, "Fit-out": 3, Agreement: 6, "LOI Signed": 9 };
+  const esc = 1 + num(roiCfg.escPct) / 100;
+  const ramp = Array.from({ length: 24 }, (_, m) => {
+    let v = 0;
+    for (const x of t) {
+      const lag = LAG[x.status];
+      if (lag === undefined) continue; /* Lead / On Hold excluded */
+      if (m >= lag) v += tenantMonthlyL(x) * Math.pow(esc, Math.floor((m - lag) / 12));
+    }
+    return { m: `M${m + 1}`, rent: Math.round(v * 10) / 10 };
+  });
+
+  const funnel = TSTATUS.map((st) => {
+    const items = t.filter((x) => x.status === st);
+    return { st, n: items.length, sft: items.reduce((s, x) => s + num(x.area), 0), rev: Math.round(items.reduce((s, x) => s + tenantMonthlyL(x), 0) * 10) / 10 };
+  });
+
+  const byCat = CAPEX_CATS.map((cat) => {
+    const items = capex.filter((c) => c.category === cat);
+    return { cat: cat.length > 22 ? cat.slice(0, 20) + "…" : cat, Budget: items.reduce((s, c) => s + (+c.budgetL || 0), 0), Spent: items.reduce((s, c) => s + (+c.spentL || 0), 0) };
+  }).filter((x) => x.Budget > 0 || x.Spent > 0);
+
+  const roiRows = t.map((x) => tenantRoi(x, roiCfg)).filter((r) => r.capex > 0);
+  const buckets = [["≤ 12 mo", (v) => v <= 12], ["12–24", (v) => v > 12 && v <= 24], ["24–36", (v) => v > 24 && v <= 36], ["> 36", (v) => isFinite(v) && v > 36], ["No payback", (v) => !isFinite(v)]];
+  const payback = buckets.map(([label, fn], i) => ({ label, n: roiRows.filter((r) => fn(r.paybackAbove)).length, fill: [C.green, C.teal, C.amber, C.red, C.red][i] }));
+  const passN = roiRows.filter((r) => r.verdict === "PASS").length;
+
+  const tradeRows = WORK_TRADES.map((tr) => {
+    const items = works.filter((w) => w.trade === tr);
+    if (!items.length) return null;
+    return { tr, n: items.length, pct: Math.round(items.reduce((s, w) => s + Math.min(100, Math.max(0, num(w.pct))), 0) / items.length), late: items.filter((w) => isOverdue(w.target, w.status === "Done")).length };
+  }).filter(Boolean);
+
+  return (
+    <div>
+      <SectionTitle eyebrow="Property · Board view" title="Analytics & Projections"
+        sub="The numbers behind the mall — occupancy, rent roll, pipeline, capex burn and deal returns. Every projection states its assumption; nothing here is editable." />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
+        <KPI label="Occupancy" value={`${occPct}%`} sub={`${fmtSft(leasedSft)} of ${fmtSft(totalSft)} leased`} tone={occPct >= 70 ? C.green : occPct >= 40 ? C.amber : C.red} />
+        <KPI label="Rent roll — signed" value={`${fmtL(rentNow)}/mo`} sub={`${signed.length} signed of ${t.length} in pipeline`} tone={C.green} />
+        <KPI label="At full occupancy" value={`${fmtL(rentFull)}/mo`} sub={achievedPsf > 0 ? `vacant sft at achieved ₹${Math.round(achievedPsf)}/sft` : `CMA anchor — no signed deals yet`} tone={C.gold} />
+        <KPI label="Capex burn" value={fmtCr(capexSpent)} sub={`of ${fmtCr(capexBudget)} budget (${Math.round((capexSpent / Math.max(1, capexBudget)) * 100)}%)`} tone={C.amber} />
+        <KPI label="Works progress" value={worksPct === null ? "—" : `${worksPct}%`} sub={worksPct === null ? "no work items yet" : `${works.length} items on the programme`} tone={C.purple} />
+      </div>
+
+      <Card title="Revenue ramp — next 24 months (₹L/mo)" style={{ marginBottom: 14 }}>
+        <div style={{ height: 260 }}>
+          <ResponsiveContainer>
+            <LineChart data={ramp} margin={{ top: 8, right: 18, bottom: 0, left: 0 }}>
+              <CartesianGrid stroke={C.lineSoft} strokeDasharray="3 3" />
+              <XAxis dataKey="m" stroke={C.faint} fontSize={10.5} interval={2} />
+              <YAxis stroke={C.faint} fontSize={10.5} />
+              <Tooltip {...chartTooltip} formatter={(v) => [`₹${v}L/mo`, "Rent roll"]} />
+              <ReferenceLine y={CMA_TARGET_L} stroke={C.gold} strokeDasharray="5 4" label={{ value: `CMA target ₹${CMA_TARGET_L}L`, fill: C.gold, fontSize: 11, position: "insideTopRight" }} />
+              <Line type="monotone" dataKey="rent" stroke={C.teal} strokeWidth={2.2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        <div style={{ fontSize: 11, color: C.faint, marginTop: 8, lineHeight: 1.6 }}>
+          Assumptions: Operational tenants pay now; Fit-out starts paying in month 3, Agreement in month 6, signed LOIs in month 9; leads excluded; base escalates {roiCfg.escPct}% yearly per the ROI assumptions. Rev-share deals use current trade-density estimates.
+        </div>
+      </Card>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(330px, 1fr))", gap: 14, marginBottom: 14 }}>
+        <Card title="Leasing pipeline funnel">
+          <div style={{ height: 220 }}>
+            <ResponsiveContainer>
+              <BarChart data={funnel} layout="vertical" margin={{ top: 4, right: 24, bottom: 0, left: 8 }}>
+                <XAxis type="number" stroke={C.faint} fontSize={10.5} allowDecimals={false} />
+                <YAxis type="category" dataKey="st" stroke={C.faint} fontSize={11} width={86} />
+                <Tooltip {...chartTooltip} formatter={(v, k, e) => [`${v} deal${v === 1 ? "" : "s"} · ${fmtSft(e.payload.sft)} · ${fmtL(e.payload.rev)}/mo`, e.payload.st]} />
+                <Bar dataKey="n" radius={[0, 5, 5, 0]}>
+                  {funnel.map((f) => <Cell key={f.st} fill={TSTATUS_COLOR[f.st]} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div style={{ fontSize: 11, color: C.faint, marginTop: 6 }}>Hover a bar for area and monthly value at that stage.</div>
+        </Card>
+        <Card title="Capex — budget vs spent by category (₹L)">
+          {byCat.length ? (
+            <div style={{ height: 220 }}>
+              <ResponsiveContainer>
+                <BarChart data={byCat} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                  <CartesianGrid stroke={C.lineSoft} strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="cat" stroke={C.faint} fontSize={9.5} interval={0} angle={-18} textAnchor="end" height={54} />
+                  <YAxis stroke={C.faint} fontSize={10.5} />
+                  <Tooltip {...chartTooltip} formatter={(v, k) => [fmtL(v), k]} />
+                  <Legend wrapperStyle={{ fontSize: 11, color: C.mute }} />
+                  <Bar dataKey="Budget" fill={C.blue} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Spent" fill={C.amber} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : <Empty text="No capex packages yet — the burn chart appears once budgets are entered." />}
+        </Card>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(330px, 1fr))", gap: 14 }}>
+        <Card title="Capex deals — payback spread">
+          {roiRows.length ? (
+            <>
+              <div style={{ height: 190 }}>
+                <ResponsiveContainer>
+                  <BarChart data={payback} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                    <XAxis dataKey="label" stroke={C.faint} fontSize={10.5} />
+                    <YAxis stroke={C.faint} fontSize={10.5} allowDecimals={false} />
+                    <Tooltip {...chartTooltip} formatter={(v) => [`${v} deal${v === 1 ? "" : "s"}`, "Payback (above base)"]} />
+                    <Bar dataKey="n" radius={[4, 4, 0, 0]}>
+                      {payback.map((x) => <Cell key={x.label} fill={x.fill} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{ fontSize: 11.5, color: C.mute, marginTop: 6 }}>{passN}/{roiRows.length} capex deals clear the screen (payback ≤ {roiCfg.targetPaybackM}m and ROI ≥ {roiCfg.targetRoiPct}%). Full workings on the Deal ROI tab of Tenants &amp; Leasing.</div>
+            </>
+          ) : <Empty text="No deals with landlord capex yet — the payback spread appears once capex deals are entered." />}
+        </Card>
+        <Card title="Works progress by trade">
+          {tradeRows.length ? tradeRows.map((x) => (
+            <div key={x.tr} style={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                <span style={{ color: C.text }}>{x.tr} <span style={{ color: C.faint }}>· {x.n} item{x.n === 1 ? "" : "s"}</span>{x.late > 0 && <span style={{ color: C.red }}> · {x.late} overdue</span>}</span>
+                <span style={{ color: C.mute, ...NUM }}>{x.pct}%</span>
+              </div>
+              <Bar_ pct={x.pct} tone={x.late > 0 ? C.red : C.teal} />
+            </div>
+          )) : <Empty text="The Work Schedule feeds this card — add programme items to see trade-wise progress." />}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 /* ================= DOCUMENTS ================= */
 function Documents({ state, setState, user }) {
   const [edit, setEdit] = useState(null);
@@ -4328,6 +4485,7 @@ export default function App() {
     tenants: <Tenants state={state} setState={writeState} canWrite={cw("tenants")} />,
     capex: <Capex state={state} setState={writeState} canWrite={cw("capex")} />,
     works: <Works state={state} setState={writeState} canWrite={cw("works")} />,
+    analytics: <Analytics state={state} />,
     marketing: <MarketingStudio state={state} setState={writeState} user={user} />,
     adminops: <AdminOps state={state} setState={writeState} canWrite={cw("adminops")} />,
     drawings: <Drawings state={state} setState={writeState} canWrite={cw("drawings")} />,
