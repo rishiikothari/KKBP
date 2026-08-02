@@ -3351,19 +3351,25 @@ service cloud.firestore {
         request.auth.token.email.matches('.*@seat[.]ttjteamos[.]app$')
       );
     }
-    function noListYet() {
-      return !exists(/databases/$(database)/documents/kkbp/allowlist);
+    function admin() {
+      return verified() && request.auth.token.email in [
+        'rishi@kkjpl.com', 'rishi@seat.ttjteamos.app',
+        'nitin@kkjpl.com', 'nitin@seat.ttjteamos.app'
+      ];
     }
     function listed() {
-      return verified() &&
-        request.auth.token.email in get(/databases/$(database)/documents/kkbp/allowlist).data.emails;
+      return verified() && (
+        !exists(/databases/$(database)/documents/kkbp/allowlist) ||
+        request.auth.token.email in get(/databases/$(database)/documents/kkbp/allowlist).data.emails
+      );
     }
     match /kkbp/state {
-      allow read, write: if verified() && (noListYet() || listed());
+      allow read, write: if admin() || listed();
     }
     match /kkbp/allowlist {
       allow read: if request.auth != null;
-      allow write: if verified() && (noListYet() || listed());
+      allow write: if admin() ||
+        (verified() && !exists(/databases/$(database)/documents/kkbp/allowlist));
     }
   }
 }`;
