@@ -61,7 +61,8 @@ const PAGES = [
   { key: "approvals",    label: "Approvals",          icon: Stamp,           group: "Daily" },
   { key: "announcements",label: "Announcements",      icon: Bell,            group: "Daily" },
   { key: "tenants",      label: "Tenants & Leasing",  icon: Store,           group: "Workspaces", depts: ["exec","leasing"] },
-  { key: "capex",        label: "Capex & Works",      icon: HardHat,         group: "Workspaces", depts: ["exec","project","design"] },
+  { key: "capex",        label: "Capex & Budgets",    icon: HardHat,         group: "Workspaces", depts: ["exec","project","design"] },
+  { key: "works",        label: "Work Schedule",      icon: CalendarDays,    group: "Workspaces", depts: ["exec","project","design"] },
   { key: "marketing",    label: "Marketing Studio",   icon: Megaphone,       group: "Workspaces", depts: ["exec","marketing"] },
   { key: "adminops",     label: "Admin & Compliance", icon: ClipboardCheck,  group: "Workspaces", depts: ["exec","admin"] },
   { key: "drawings",     label: "Drawings & RFIs",    icon: DraftingCompass, group: "Workspaces", depts: ["exec","project","design"] },
@@ -80,7 +81,7 @@ const pageAllowed = (p, u) => (!p.owner || isAppAdmin(u)) && (!p.depts || p.dept
 
 /* Registers each dept can WRITE. Externals never write registers (they act on tasks/content assigned to them). */
 const WRITE_DEPT = {
-  tenants: ["leasing"], capex: ["project"], marketing: ["marketing"],
+  tenants: ["leasing"], capex: ["project"], works: ["project", "design"], marketing: ["marketing"],
   adminops: ["admin"], drawings: ["project", "design"], layout: ["leasing", "project"],
 };
 const canWritePage = (key, u) => {
@@ -131,6 +132,15 @@ const CSTATUS = ["Planned","Approved","Tendered","In Progress","Complete"];
 const CSTATUS_COLOR = { Planned: C.faint, Approved: C.blue, Tendered: C.purple, "In Progress": C.amber, Complete: C.green };
 
 const SEED_CAPEX = [];
+
+/* Construction work programme — the development/contractor team's schedule of
+   everything planned, being done and already done on site. */
+const WORK_TRADES = ["Civil & Structure","Facade","Waterproofing","Flooring & Finishes","MEP — Electrical","MEP — HVAC","MEP — Plumbing & Fire","Lifts & Escalators","External Development","Signage & Graphics","Interiors & Common Areas","Other"];
+const WORK_PHASES = ["Shell & Core","External Works","Services","Finishes","Fit-out Enablement","Handover"];
+const WSTATUS = ["Planned","In Progress","On Hold","Done"];
+const WSTATUS_COLOR = { Planned: C.faint, "In Progress": C.amber, "On Hold": C.red, Done: C.green };
+const SEED_WORKS = [];
+const blankWork = () => ({ id: "", name: "", trade: WORK_TRADES[0], phase: WORK_PHASES[0], contractor: "", floor: "", start: "", target: "", status: "Planned", pct: 0, capexId: "", notes: "" });
 
 const SEED_CAMPAIGNS = [];
 
@@ -230,6 +240,16 @@ const migrateState = (st) => {
     out.users = out.users.map((u) => patch[u.username] ? { ...u, ...patch[u.username] } : u);
     out.roleVersion = 4;
     out.constitutionVersion = Math.max(out.constitutionVersion || 2, 3); /* §3–4 changed → re-acknowledge */
+  }
+  /* additive collections introduced after launch — never wipe, just backfill */
+  if (!Array.isArray(out.works)) out.works = [];
+  /* prune session entries not seen for 30 days so the registry (and the shared
+     state doc) doesn't grow without bound */
+  if (out.sessions && typeof out.sessions === "object") {
+    const cutoff = Date.now() - 30 * 86400000;
+    const pruned = {};
+    for (const [k, v] of Object.entries(out.sessions)) if (v && (v.seen || v.in || 0) >= cutoff) pruned[k] = v;
+    out.sessions = pruned;
   }
   return out;
 };
@@ -524,7 +544,7 @@ async function pushLive(state) {
    On load, any state stamped with an older epoch is thrown away and replaced. */
 const DATA_EPOCH = "2026-07-30-clean";
 const freshState = () => ({
-  users: SEED_USERS, tenants: SEED_TENANTS, capex: SEED_CAPEX,
+  users: SEED_USERS, tenants: SEED_TENANTS, capex: SEED_CAPEX, works: SEED_WORKS,
   campaigns: SEED_CAMPAIGNS, content: SEED_CONTENT,
   compliance: SEED_COMPLIANCE, vendors: SEED_VENDORS,
   drawings: SEED_DRAWINGS, rfis: SEED_RFIS, zones: SEED_ZONES,
@@ -545,7 +565,7 @@ const freshState = () => ({
 });
 /* How much real content a state holds — used to stop an empty cloud workspace
    from shadowing a device that already carries real data. */
-const RECORD_COLS = ["tenants","capex","campaigns","content","compliance","vendors","drawings","rfis","zones","tasks","approvals","announcements","meetings","docs"];
+const RECORD_COLS = ["tenants","capex","works","campaigns","content","compliance","vendors","drawings","rfis","zones","tasks","approvals","announcements","meetings","docs"];
 const recordCount = (st) => RECORD_COLS.reduce((n, k) => n + ((st && st[k]) || []).length, 0);
 /* Fresh workspace, but carry forward the shared AI key (a credential, not sample
    data) so a reset doesn't knock the AI Notetaker offline for everyone. */
@@ -557,7 +577,7 @@ const resetToCleanSlate = (prev) => {
 
 /* ---------- central audit: diff old vs new state, record who changed what ---------- */
 const AUDIT_COLS = {
-  users: (r) => r.name, tenants: (r) => r.name, capex: (r) => r.name, campaigns: (r) => r.name,
+  users: (r) => r.name, tenants: (r) => r.name, capex: (r) => r.name, works: (r) => r.name, campaigns: (r) => r.name,
   content: (r) => r.title, compliance: (r) => r.name, vendors: (r) => r.name, drawings: (r) => r.title,
   rfis: (r) => r.title, zones: (r) => r.name, tasks: (r) => r.title, approvals: (r) => r.title,
   announcements: (r) => r.title, meetings: (r) => r.title, docs: (r) => r.name,
@@ -1590,7 +1610,7 @@ function Capex({ state, setState, canWrite }) {
 
   return (
     <div>
-      <SectionTitle eyebrow="Projects" title="Capex & Works" sub="Budget vs actual across every works package. Approval routing follows the Delegation of Authority in the constitution." />
+      <SectionTitle eyebrow="Projects" title="Capex & Budgets" sub="Budget vs actual across every works package. Approval routing follows the Delegation of Authority in the constitution." />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginBottom: 16 }}>
         <KPI label="Total capex budget" value={fmtCr(budget)} sub={`${state.capex.length} packages`} tone={C.blue} />
         <KPI label="Spent to date" value={fmtCr(spent)} sub={`${Math.round((spent / Math.max(1, budget)) * 100)}% of budget`} tone={C.amber} />
@@ -1675,6 +1695,183 @@ function Capex({ state, setState, canWrite }) {
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
             <Btn ghost onClick={() => setEdit(null)}>Cancel</Btn>
             <Btn onClick={save} disabled={!edit.name}>Save package</Btn>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+/* ================= WORK SCHEDULE (construction programme) ================= */
+/* The development team's own register: every piece of site work — planned, in
+   progress, on hold or done — with contractor, dates and % complete. Kept
+   separate from Tasks (personal to-dos) and Capex (money): this is the
+   programme. Three views: table, board and a dependency-free timeline. */
+function WorksTimeline({ items }) {
+  const ds = items.filter((w) => w.start && w.target && +new Date(w.target) >= +new Date(w.start));
+  if (!ds.length) return <Empty text="Add start and target dates to work items to see them on the timeline." />;
+  const min = Math.min(...ds.map((w) => +new Date(w.start)));
+  const max = Math.max(...ds.map((w) => +new Date(w.target)));
+  const span = Math.max(86400000, max - min);
+  const pos = (d) => Math.min(100, Math.max(0, ((+new Date(d)) - min) / span * 100));
+  /* month ticks across the span */
+  const ticks = [];
+  { const t = new Date(min); t.setDate(1); for (; +t <= max; t.setMonth(t.getMonth() + 1)) if (+t >= min) ticks.push({ p: pos(t), label: t.toLocaleDateString("en-IN", { month: "short", year: "2-digit" }) }); }
+  const tp = pos(today());
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <div style={{ minWidth: 640 }}>
+        <div style={{ position: "relative", height: 18, marginLeft: 190 }}>
+          {ticks.map((t, i) => <div key={i} style={{ position: "absolute", left: `${t.p}%`, fontSize: 10, color: C.faint, whiteSpace: "nowrap" }}>{t.label}</div>)}
+        </div>
+        {ds.map((w) => {
+          const l = pos(w.start), r = pos(w.target);
+          const late = isOverdue(w.target, w.status === "Done");
+          const tone = WSTATUS_COLOR[w.status] || C.faint;
+          return (
+            <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
+              <div style={{ width: 182, flexShrink: 0, fontSize: 12, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={w.name}>{w.name}</div>
+              <div style={{ position: "relative", flex: 1, height: 18, background: C.panel3, borderRadius: 4 }}>
+                {tp >= 0 && tp <= 100 && <div style={{ position: "absolute", left: `${tp}%`, top: -2, bottom: -2, width: 1, background: C.gold, opacity: 0.8 }} />}
+                <div style={{ position: "absolute", left: `${l}%`, width: `${Math.max(1.5, r - l)}%`, top: 2, bottom: 2, background: `${tone}30`, border: late ? `1px solid ${C.red}` : `1px solid ${tone}55`, borderRadius: 3, overflow: "hidden" }}>
+                  <div style={{ width: `${Math.min(100, Math.max(0, num(w.pct)))}%`, height: "100%", background: `${tone}88` }} />
+                </div>
+              </div>
+              <div style={{ width: 44, flexShrink: 0, fontSize: 11, color: late ? C.red : C.mute, textAlign: "right", ...NUM }}>{Math.round(num(w.pct))}%{late ? " ⚠" : ""}</div>
+            </div>
+          );
+        })}
+        <div style={{ fontSize: 10.5, color: C.faint, marginTop: 8, marginLeft: 190 }}>Gold line = today. Bar fill = % complete. Red border = past target date.</div>
+      </div>
+    </div>
+  );
+}
+
+function Works({ state, setState, canWrite }) {
+  const [edit, setEdit] = useState(null);
+  const [view, setView] = useState("table");
+  const [filterTrade, setFilterTrade] = useState("All");
+  const [filterStatus, setFilterStatus] = useState("All");
+  const all = state.works || [];
+  const list = all.filter((w) => (filterTrade === "All" || w.trade === filterTrade) && (filterStatus === "All" || w.status === filterStatus));
+  const overdue = all.filter((w) => isOverdue(w.target, w.status === "Done"));
+  const active = all.filter((w) => w.status === "In Progress");
+  const avgPct = all.length ? Math.round(all.reduce((s, w) => s + Math.min(100, Math.max(0, num(w.pct))), 0) / all.length) : 0;
+  const save = () => {
+    const rec = { ...edit, id: edit.id || uid(), pct: Math.min(100, Math.max(0, num(edit.pct))) };
+    if (rec.status === "Done") rec.pct = 100;
+    setState((s) => ({ ...s, works: edit.id ? s.works.map((w) => (w.id === edit.id ? rec : w)) : [...(s.works || []), rec] }));
+    setEdit(null);
+  };
+  const del = (id) => { if (confirm("Delete this work item?")) setState((s) => ({ ...s, works: s.works.filter((w) => w.id !== id) })); };
+  const move = (w, status) => setState((s) => ({ ...s, works: s.works.map((x) => x.id === w.id ? { ...x, status, pct: status === "Done" ? 100 : x.pct } : x) }));
+  const capexName = (id) => { const c = (state.capex || []).find((x) => x.id === id); return c ? c.name : ""; };
+  const viewBtn = (k, label) => (
+    <button key={k} onClick={() => setView(k)} style={{ padding: "6px 13px", borderRadius: 7, border: `1px solid ${view === k ? C.gold : C.line}`, background: view === k ? `${C.gold}1A` : "transparent", color: view === k ? C.gold : C.mute, fontSize: 12, cursor: "pointer", fontFamily: SANS }}>{label}</button>
+  );
+  return (
+    <div>
+      <SectionTitle eyebrow="Projects" title="Work Schedule" sub="The construction programme — everything to be done, being done and already done on site, by trade and contractor." />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginBottom: 16 }}>
+        <KPI label="Work items" value={all.length} sub={`${all.filter((w) => w.status === "Done").length} done`} tone={C.blue} />
+        <KPI label="In progress" value={active.length} sub="on site now" tone={C.amber} />
+        <KPI label="Overdue" value={overdue.length} sub="past target date" tone={overdue.length ? C.red : C.green} />
+        <KPI label="Overall progress" value={`${avgPct}%`} sub="average across items" tone={C.purple} />
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
+        {viewBtn("table", "Table")}{viewBtn("board", "Board")}{viewBtn("timeline", "Timeline")}
+        <Sel value={filterTrade} onChange={(e) => setFilterTrade(e.target.value)} options={["All", ...WORK_TRADES]} style={{ width: 210 }} />
+        <Sel value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} options={["All", ...WSTATUS]} style={{ width: 140 }} />
+        <div style={{ flex: 1 }} />
+        {canWrite && <Btn onClick={() => setEdit(blankWork())}><Plus size={14} /> Add work item</Btn>}
+      </div>
+
+      {view === "table" && (
+        <Card pad={0}>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 940 }}>
+              <thead><tr><Th>Work item</Th><Th>Trade</Th><Th>Phase</Th><Th>Floor</Th><Th>Start</Th><Th>Target</Th><Th>Progress</Th><Th>Status</Th>{canWrite && <Th right>Actions</Th>}</tr></thead>
+              <tbody>
+                {list.map((w) => {
+                  const late = isOverdue(w.target, w.status === "Done");
+                  return (
+                    <tr key={w.id}>
+                      <Td><div style={{ fontWeight: 600 }}>{w.name}</div>{(w.contractor || w.capexId) && <div style={{ fontSize: 11, color: C.faint }}>{w.contractor}{w.contractor && w.capexId ? " · " : ""}{w.capexId ? `Capex: ${capexName(w.capexId)}` : ""}</div>}</Td>
+                      <Td style={{ color: C.mute, fontSize: 12 }}>{w.trade}</Td>
+                      <Td style={{ color: C.mute, fontSize: 12 }}>{w.phase}</Td>
+                      <Td style={{ color: C.mute, fontSize: 12 }}>{w.floor || "—"}</Td>
+                      <Td style={{ color: C.mute, fontSize: 12, ...NUM }}>{w.start || "—"}</Td>
+                      <Td style={late ? { color: C.red, fontSize: 12, fontWeight: 700, ...NUM } : { color: C.mute, fontSize: 12, ...NUM }}>{w.target || "—"}{late ? " ⚠" : ""}</Td>
+                      <Td style={{ minWidth: 110 }}><Bar_ pct={num(w.pct)} tone={late ? C.red : WSTATUS_COLOR[w.status]} /></Td>
+                      <Td><Badge text={w.status} color={WSTATUS_COLOR[w.status]} /></Td>
+                      {canWrite && <Td right>
+                        <Pencil size={14} color={C.mute} style={{ cursor: "pointer", marginRight: 12 }} onClick={() => setEdit({ ...w })} />
+                        <Trash2 size={14} color={C.red} style={{ cursor: "pointer" }} onClick={() => del(w.id)} />
+                      </Td>}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {list.length === 0 && <Empty text="No work items yet — add the programme item by item, or filter differently." />}
+          </div>
+        </Card>
+      )}
+
+      {view === "board" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 12 }}>
+          {WSTATUS.map((st) => (
+            <Card key={st} title={`${st} (${list.filter((w) => w.status === st).length})`}>
+              {list.filter((w) => w.status === st).map((w) => {
+                const late = isOverdue(w.target, w.status === "Done");
+                return (
+                  <div key={w.id} style={{ background: C.panel3, border: `1px solid ${late ? C.red + "66" : C.lineSoft}`, borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{w.name}</div>
+                    <div style={{ fontSize: 11, color: C.faint, marginTop: 3 }}>{w.trade}{w.contractor ? ` · ${w.contractor}` : ""}</div>
+                    {w.target && <div style={{ fontSize: 11, color: late ? C.red : C.mute, marginTop: 3, ...NUM }}>Target {w.target}{late ? " ⚠" : ""}</div>}
+                    <div style={{ marginTop: 6 }}><Bar_ pct={num(w.pct)} tone={late ? C.red : WSTATUS_COLOR[w.status]} /></div>
+                    {canWrite && (
+                      <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                        {WSTATUS.filter((x) => x !== st).map((x) => (
+                          <button key={x} onClick={() => move(w, x)} style={{ fontSize: 10.5, padding: "3px 8px", borderRadius: 5, border: `1px solid ${C.line}`, background: "transparent", color: C.mute, cursor: "pointer", fontFamily: SANS }}>→ {x}</button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {list.filter((w) => w.status === st).length === 0 && <div style={{ fontSize: 11.5, color: C.faint, padding: "6px 0" }}>Nothing here.</div>}
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {view === "timeline" && <Card title="Programme timeline"><WorksTimeline items={list} /></Card>}
+
+      {edit && (
+        <Modal title={edit.id ? `Edit — ${edit.name}` : "Add work item"} onClose={() => setEdit(null)} wide>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+            <Field label="Work item"><Inp value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} placeholder="e.g. Atrium flooring — Plot 1 Ground" /></Field>
+            <Field label="Trade"><Sel value={edit.trade} onChange={(e) => setEdit({ ...edit, trade: e.target.value })} options={WORK_TRADES} /></Field>
+            <Field label="Phase"><Sel value={edit.phase} onChange={(e) => setEdit({ ...edit, phase: e.target.value })} options={WORK_PHASES} /></Field>
+            <Field label="Contractor / agency"><Inp value={edit.contractor} onChange={(e) => setEdit({ ...edit, contractor: e.target.value })} /></Field>
+            <Field label="Floor / area"><Inp value={edit.floor} onChange={(e) => setEdit({ ...edit, floor: e.target.value })} placeholder="e.g. Plot 2 · First" /></Field>
+            <Field label="Start date"><Inp type="date" value={edit.start} onChange={(e) => setEdit({ ...edit, start: e.target.value })} /></Field>
+            <Field label="Target date"><Inp type="date" value={edit.target} onChange={(e) => setEdit({ ...edit, target: e.target.value })} /></Field>
+            <Field label="Status"><Sel value={edit.status} onChange={(e) => setEdit({ ...edit, status: e.target.value })} options={WSTATUS} /></Field>
+            <Field label="% complete"><Inp type="number" min={0} max={100} value={edit.pct} onChange={(e) => setEdit({ ...edit, pct: e.target.value })} /></Field>
+            <Field label="Linked capex package (optional)">
+              <select value={edit.capexId || ""} onChange={(e) => setEdit({ ...edit, capexId: e.target.value })} style={inputSt}>
+                <option value="">— none —</option>
+                {(state.capex || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </Field>
+          </div>
+          <div style={{ marginTop: 12 }}><Field label="Notes"><Ta value={edit.notes} onChange={(e) => setEdit({ ...edit, notes: e.target.value })} /></Field></div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+            <Btn ghost onClick={() => setEdit(null)}>Cancel</Btn>
+            <Btn onClick={save} disabled={!edit.name}>Save work item</Btn>
           </div>
         </Modal>
       )}
@@ -3891,6 +4088,7 @@ export default function App() {
     announcements: <Announcements state={state} setState={writeState} user={user} />,
     tenants: <Tenants state={state} setState={writeState} canWrite={cw("tenants")} />,
     capex: <Capex state={state} setState={writeState} canWrite={cw("capex")} />,
+    works: <Works state={state} setState={writeState} canWrite={cw("works")} />,
     marketing: <MarketingStudio state={state} setState={writeState} user={user} />,
     adminops: <AdminOps state={state} setState={writeState} canWrite={cw("adminops")} />,
     drawings: <Drawings state={state} setState={writeState} canWrite={cw("drawings")} />,
