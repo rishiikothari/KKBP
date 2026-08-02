@@ -15,17 +15,18 @@ import {
 } from "recharts";
 
 /* ================= THEME ================= */
-/* The Town Junction brand (per the official identity): deep violet ground
-   (brand purple #4B0D9E, darkened for long reading), the orange-gradient
-   globe mark, warm cream type, high-contrast serif headlines. */
+/* The Town Junction brand: a near-black ink ground with a quiet purple
+   undertone — easy on the eyes over long sessions — so the orange-gradient
+   globe (the official logo file, on its vivid brand purple) is the only
+   loud thing on screen. Warm cream type, serif headlines. */
 const BRAND_PURPLE = "#3F0099"; /* sampled from the official logo file */
 const C = {
-  bg: "#190838", panel: "#231048", panel2: "#2C155C", panel3: "#1E0C42",
-  line: "#3D2280", lineSoft: "#33196C",
+  bg: "#110D1F", panel: "#181329", panel2: "#1F1933", panel3: "#141021",
+  line: "#2E2748", lineSoft: "#251F3C",
   gold: "#F79A2E", goldDim: "#B4722C",
-  text: "#F7F1E5", mute: "#B3A8D8", faint: "#7C6FAE",
+  text: "#F5F0E4", mute: "#A8A2C0", faint: "#6E6890",
   green: "#6BC59A", amber: "#E9A94E", red: "#E5765E", blue: "#8FADE3",
-  purple: "#B49AE8", teal: "#6FC5C0", rose: "#D68F9F",
+  purple: "#AC97DE", teal: "#6FC5C0", rose: "#D68F9F",
 };
 const SERIF = "'Playfair Display', Georgia, 'Times New Roman', serif";
 const SANS = "-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
@@ -865,7 +866,7 @@ function Login({ users, onLogin, onLink, onAttempt, liveOn, liveStatus, authInfo
     finally { setBusy(false); }
   };
   return (
-    <div style={{ minHeight: "100vh", background: `radial-gradient(1200px 600px at 70% -10%, #3A1580 0%, ${C.bg} 55%)`, display: "flex", alignItems: "center", justifyContent: "center", padding: "calc(env(safe-area-inset-top, 0px) + 40px) 20px calc(env(safe-area-inset-bottom, 0px) + 40px)", fontFamily: SANS }}>
+    <div style={{ minHeight: "100vh", background: `radial-gradient(1200px 600px at 70% -10%, #241B45 0%, ${C.bg} 55%)`, display: "flex", alignItems: "center", justifyContent: "center", padding: "calc(env(safe-area-inset-top, 0px) + 40px) 20px calc(env(safe-area-inset-bottom, 0px) + 40px)", fontFamily: SANS }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
         <div style={{ textAlign: "center", marginBottom: 26 }}>
           <div style={{ width: 62, height: 62, margin: "0 auto 14px", display: "flex", alignItems: "center", justifyContent: "center" }}>
