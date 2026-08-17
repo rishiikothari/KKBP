@@ -6,7 +6,7 @@ import {
   Landmark, KeyRound, ChevronRight, FileText, CalendarDays, Wrench, Search,
   ListChecks, Stamp, Bell, FolderOpen, NotebookPen, Send, ThumbsUp, ThumbsDown,
   Pin, Link as LinkIcon, Activity, Mic, Square, Sparkles, Loader2, FileAudio, MessageSquareText, Pause, Play,
-  Menu, Eye, Upload, Film, Image as ImageIcon, FileCheck2,
+  Menu, Upload, Film, Image as ImageIcon, FileCheck2,
 } from "lucide-react";
 import * as WA from "./importer.js";
 import {
@@ -100,30 +100,30 @@ const canWritePage = (key, u) => {
 const CMA_TARGET_L = 541;
 
 const SEED_USERS = [
-  { id:"u1", name:"Rishi Kothari", dept:"exec", subRole:"Owner / Promoter · Oversees everything day-to-day · IT & Digital (rishi@kkjpl.com)", tier:"head", exec:"owner", finApprover:true, appAdmin:true, email:"rishi@kkjpl.com", username:"rishi", password:"7001" },
-  { id:"u2", name:"Nitin Kothari", dept:"exec", subRole:"Owner & Managing Director · Final authority on every decision (nitin@kkjpl.com)", tier:"head", exec:"owner", finApprover:true, email:"nitin@kkjpl.com", username:"nitin", password:"7002" },
-  { id:"u3", name:"Arjun Kothari", dept:"exec", subRole:"Owner / Promoter · Brand & PR direction", tier:"head", exec:"owner", finApprover:true, username:"arjun", password:"7003" },
-  { id:"u4", name:"Manoj Agarwal", dept:"exec", subRole:"CEO — External consultant (MKA) · Runs weekly cadence, CAM & sign-offs", tier:"head", exec:"ceo", username:"manoj", password:"7004" },
-  { id:"u5", name:"Sushil Ahuja", dept:"leasing", subRole:"Head of Leasing · Consultant, Delhi (dedicated to TTJ since 1 Jun)", tier:"head", username:"sushil", password:"7005" },
-  { id:"u6", name:"Rateesh", dept:"leasing", subRole:"Leasing Consultant — Chennai · South-India brand pipeline", tier:"external", username:"rateesh", password:"7006" },
-  { id:"u7", name:"Basha", dept:"leasing", subRole:"Leasing Coordinator — Nagpur · On-ground client visits", tier:"member", username:"basha", password:"7007" },
-  { id:"u8", name:"Mayur", dept:"leasing", subRole:"Sales — Leasing enquiries", tier:"member", username:"mayur", password:"7008" },
-  { id:"u9", name:"Priyanka Thakur", dept:"marketing", subRole:"Head of Marketing", tier:"head", username:"priyanka", password:"7009" },
-  { id:"u10", name:"Kirti Chaturvedi", dept:"marketing", subRole:"INIT Design Studio · Creative & account lead (brochure, decks, VAMOS, shoot)", tier:"external", username:"kirti", password:"7010" },
-  { id:"u11", name:"Rajvi Merchant", dept:"marketing", subRole:"INIT Design Studio · Brand strategy & nomenclature lead", tier:"external", username:"rajvi", password:"7011" },
-  { id:"u12", name:"Jeetu Surana", dept:"admin", subRole:"Head of Admin & Ops · FEC Game Zone (Hyderabad)", tier:"head", username:"jeetu", password:"7012" },
-  { id:"u13", name:"Narayan", dept:"project", subRole:"Site Team — Nagpur · Civil execution", tier:"member", username:"narayan", password:"7013" },
-  { id:"u14", name:"Prashant (Site)", dept:"project", subRole:"Site Engineer · External development (trench, RWP, painting)", tier:"member", username:"prashant", password:"7014" },
-  { id:"u15", name:"Mahesh Gupta", dept:"project", subRole:"Liaison · DP road / NIT / NMC & advertisement permissions", tier:"external", username:"mahesh", password:"7015" },
-  { id:"u16", name:"Pratham Pincha", dept:"project", subRole:"Sanctioning & approvals consultant", tier:"external", username:"pratham", password:"7016" },
-  { id:"u17", name:"Aniket Satone", dept:"design", subRole:"Principal Architect — In-house · Drawings, RFIs, coordination (development@kkbp.in)", tier:"head", username:"aniket", password:"7017" },
-  { id:"u18", name:"Aviral (Lokre)", dept:"design", subRole:"Architect — Lokre, Ahmedabad · External development, masterplan & signage", tier:"external", username:"aviral", password:"7018" },
-  { id:"u19", name:"Shah Chintan", dept:"design", subRole:"MEP Consultant — Jhaveri Associates (HVAC / electrical / CCTV)", tier:"external", username:"chintan", password:"7019" },
-  { id:"u20", name:"Samir Diwanji", dept:"design", subRole:"Plumbing & Drainage — Jhaveri Associates", tier:"external", username:"samir", password:"7020" },
-  { id:"u21", name:"Paresh Padole", dept:"design", subRole:"Electrical Consultant · Transformers & liaisoning", tier:"external", username:"paresh", password:"7021" },
-  { id:"u22", name:"Karna Shah", dept:"marketing", subRole:"INIT Design Studio · PR & partnerships lead", tier:"external", username:"karna", password:"7022" },
-  { id:"u23", name:"Sumit Bhaiya", dept:"admin", subRole:"KKBP Staff — Logistics & deliveries (Nagpur)", tier:"member", username:"sumit", password:"7023" },
-  { id:"u24", name:"Robin (INIT)", dept:"marketing", subRole:"INIT Design Studio · Brand strategy (Singapore)", tier:"external", username:"robin", password:"7024" },
+  { id:"u1", name:"Rishi Kothari", dept:"exec", subRole:"Owner / Promoter · Oversees everything day-to-day · IT & Digital (rishi@kkjpl.com)", tier:"head", exec:"owner", finApprover:true, appAdmin:true, email:"rishi@kkjpl.com", username:"rishi" },
+  { id:"u2", name:"Nitin Kothari", dept:"exec", subRole:"Owner & Managing Director · Final authority on every decision (nitin@kkjpl.com)", tier:"head", exec:"owner", finApprover:true, email:"nitin@kkjpl.com", username:"nitin" },
+  { id:"u3", name:"Arjun Kothari", dept:"exec", subRole:"Owner / Promoter · Brand & PR direction", tier:"head", exec:"owner", finApprover:true, username:"arjun" },
+  { id:"u4", name:"Manoj Agarwal", dept:"exec", subRole:"CEO — External consultant (MKA) · Runs weekly cadence, CAM & sign-offs", tier:"head", exec:"ceo", username:"manoj" },
+  { id:"u5", name:"Sushil Ahuja", dept:"leasing", subRole:"Head of Leasing · Consultant, Delhi (dedicated to TTJ since 1 Jun)", tier:"head", username:"sushil" },
+  { id:"u6", name:"Rateesh", dept:"leasing", subRole:"Leasing Consultant — Chennai · South-India brand pipeline", tier:"external", username:"rateesh" },
+  { id:"u7", name:"Basha", dept:"leasing", subRole:"Leasing Coordinator — Nagpur · On-ground client visits", tier:"member", username:"basha" },
+  { id:"u8", name:"Mayur", dept:"leasing", subRole:"Sales — Leasing enquiries", tier:"member", username:"mayur" },
+  { id:"u9", name:"Priyanka Thakur", dept:"marketing", subRole:"Head of Marketing", tier:"head", username:"priyanka" },
+  { id:"u10", name:"Kirti Chaturvedi", dept:"marketing", subRole:"INIT Design Studio · Creative & account lead (brochure, decks, VAMOS, shoot)", tier:"external", username:"kirti" },
+  { id:"u11", name:"Rajvi Merchant", dept:"marketing", subRole:"INIT Design Studio · Brand strategy & nomenclature lead", tier:"external", username:"rajvi" },
+  { id:"u12", name:"Jeetu Surana", dept:"admin", subRole:"Head of Admin & Ops · FEC Game Zone (Hyderabad)", tier:"head", username:"jeetu" },
+  { id:"u13", name:"Narayan", dept:"project", subRole:"Site Team — Nagpur · Civil execution", tier:"member", username:"narayan" },
+  { id:"u14", name:"Prashant (Site)", dept:"project", subRole:"Site Engineer · External development (trench, RWP, painting)", tier:"member", username:"prashant" },
+  { id:"u15", name:"Mahesh Gupta", dept:"project", subRole:"Liaison · DP road / NIT / NMC & advertisement permissions", tier:"external", username:"mahesh" },
+  { id:"u16", name:"Pratham Pincha", dept:"project", subRole:"Sanctioning & approvals consultant", tier:"external", username:"pratham" },
+  { id:"u17", name:"Aniket Satone", dept:"design", subRole:"Principal Architect — In-house · Drawings, RFIs, coordination (development@kkbp.in)", tier:"head", email:"development@kkbp.in", username:"aniket" },
+  { id:"u18", name:"Aviral (Lokre)", dept:"design", subRole:"Architect — Lokre, Ahmedabad · External development, masterplan & signage", tier:"external", username:"aviral" },
+  { id:"u19", name:"Shah Chintan", dept:"design", subRole:"MEP Consultant — Jhaveri Associates (HVAC / electrical / CCTV)", tier:"external", username:"chintan" },
+  { id:"u20", name:"Samir Diwanji", dept:"design", subRole:"Plumbing & Drainage — Jhaveri Associates", tier:"external", username:"samir" },
+  { id:"u21", name:"Paresh Padole", dept:"design", subRole:"Electrical Consultant · Transformers & liaisoning", tier:"external", username:"paresh" },
+  { id:"u22", name:"Karna Shah", dept:"marketing", subRole:"INIT Design Studio · PR & partnerships lead", tier:"external", username:"karna" },
+  { id:"u23", name:"Sumit Bhaiya", dept:"admin", subRole:"KKBP Staff — Logistics & deliveries (Nagpur)", tier:"member", username:"sumit" },
+  { id:"u24", name:"Robin (INIT)", dept:"marketing", subRole:"INIT Design Studio · Brand strategy (Singapore)", tier:"external", username:"robin" },
 ];
 
 const TENANT_CATS = ["Anchor Retail","Anchor Brand","Vanilla Retail","F&B","Entertainment","Department Store","Services","Pool / Unallocated"];
@@ -304,24 +304,10 @@ const uaInfo = () => {
   const br = /Edg\//.test(ua) ? "Edge" : /OPR\//.test(ua) ? "Opera" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : /Firefox\//.test(ua) ? "Firefox" : "Browser";
   return `${br} · ${os}`;
 };
-/* Passwords are stored as salted SHA-256 hashes. Legacy plaintext passwords
-   still verify and are upgraded to a hash on first successful login. */
-const genSalt = () => Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 12);
-async function sha256Hex(s) {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
-  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-async function hashPassword(pw, salt) { return await sha256Hex(salt + "::" + pw); }
-async function verifyPassword(u, pw) {
-  if (u.pwHash && u.pwSalt) return (await hashPassword(pw, u.pwSalt)) === u.pwHash;
-  return (u.password || "") === pw; /* legacy plaintext */
-}
-/* Device-local brute-force throttle: 5 failed tries per username → 15 min lock. */
-const FAILS_KEY = "kkbp-login-fails";
-const loadFails = () => { try { return JSON.parse(localStorage.getItem(FAILS_KEY) || "{}"); } catch (e) { return {}; } };
-const recordFail = (un) => { try { const f = loadFails(); f[un] = [...(f[un] || []).filter((t) => Date.now() - t < 15 * 60000), Date.now()]; localStorage.setItem(FAILS_KEY, JSON.stringify(f)); return f[un].length; } catch (e) { return 0; } };
-const failsLeft = (un) => { const f = (loadFails()[un] || []).filter((t) => Date.now() - t < 15 * 60000); return { count: f.length, oldest: f[0] || 0 }; };
-const clearFails = (un) => { try { const f = loadFails(); delete f[un]; localStorage.setItem(FAILS_KEY, JSON.stringify(f)); } catch (e) {} };
+/* The app stores no passwords of its own. Sign-in is Firebase Auth only —
+   Google, or an email/password account the administrator creates — so there is
+   nothing here to brute-force, hash, or accidentally publish. Rate limiting and
+   credential storage are Google's problem, where they belong. */
 let fbDocRef = null, fbSetDoc = null, _fbApp = null, _fbDb = null;
 async function fbApp(cfg) {
   const m = await import("firebase/app");
@@ -382,9 +368,11 @@ async function googleSignOut() {
   try { const cfg = effectiveFbConfig(); const { app } = await fbApp(cfg); const A = await import("firebase/auth"); await A.signOut(A.getAuth(app)); } catch (e) {}
   location.reload();
 }
-/* Email/password workspace sign-in for members without Google accounts.
-   Unknown emails self-register; a verification mail must be clicked before the
-   rules let the account in (prevents impersonating an allowlisted address). */
+/* Email/password sign-in. Accounts are created by the administrator only (in
+   the Firebase console, or via the server once that lands) — the app never
+   self-registers, so an address nobody was issued simply has no account and
+   cannot be claimed by a stranger. First sign-in asks the member to confirm
+   their address once, which proves they own the mailbox. */
 async function emailWorkspaceSignIn(email, password) {
   const cfg = effectiveFbConfig(); if (!cfg) return { ok: false, msg: "No shared workspace configured." };
   const { app } = await fbApp(cfg);
@@ -392,22 +380,19 @@ async function emailWorkspaceSignIn(email, password) {
   const auth = A.getAuth(app);
   try {
     const cred = await A.signInWithEmailAndPassword(auth, email, password);
-    try { await cred.user.reload(); await cred.user.getIdToken(true); } catch (e) {} /* pick up a verification done elsewhere */
+    try { await cred.user.reload(); await cred.user.getIdToken(true); } catch (e) {} /* pick up a confirmation done elsewhere */
     if (!cred.user.emailVerified) {
       try { await A.sendEmailVerification(cred.user); } catch (e) {}
-      return { ok: false, msg: "Not verified yet — we've re-sent the link to " + email + ". Open it on this device, then tap Sign in again." };
+      return { ok: false, msg: "Almost there — we've sent a confirmation link to " + email + ". Open it, then tap Sign in again." };
     }
     location.reload(); return { ok: true };
   } catch (e) {
     const code = (e && e.code) || "";
-    if (code.includes("user-not-found")) {
-      try {
-        const cred = await A.createUserWithEmailAndPassword(auth, email, password);
-        try { await A.sendEmailVerification(cred.user); } catch (e2) {}
-        return { ok: false, msg: "Account created — check your inbox for the verification link, click it, then reload this page." };
-      } catch (e3) { return { ok: false, msg: (e3 && e3.message) || String(e3) }; }
+    if (code.includes("user-not-found") || code.includes("invalid-credential") || code.includes("wrong-password")) {
+      return { ok: false, msg: "That email and password didn't match an account. Accounts are created by Rishi — ask him to set yours up, or use Reset if you've forgotten the password." };
     }
-    if (code.includes("wrong-password") || code.includes("invalid-credential")) return { ok: false, msg: "Wrong password for this email. Use Reset if you've forgotten it." };
+    if (code.includes("admin-restricted-operation")) return { ok: false, msg: "There's no account for this email yet — ask Rishi to create one for you." };
+    if (code.includes("too-many-requests")) return { ok: false, msg: "Too many attempts. Wait a few minutes and try again, or use Reset." };
     return { ok: false, msg: (e && e.message) || String(e) };
   }
 }
@@ -415,84 +400,14 @@ async function emailWorkspaceReset(email) {
   try { const cfg = effectiveFbConfig(); const { app } = await fbApp(cfg); const A = await import("firebase/auth"); await A.sendPasswordResetEmail(A.getAuth(app), email); return "Password-reset link sent — check your inbox."; }
   catch (e) { return "Couldn't send reset: " + ((e && e.message) || e); }
 }
-/* Open a Google popup during seat-linking and return the chosen email (no reload). */
-async function googlePopupEmail() {
-  await warmAuth();
-  const A = _authMod, auth = _authInst;
-  const prov = new A.GoogleAuthProvider(); prov.setCustomParameters({ prompt: "select_account" });
-  const res = await A.signInWithPopup(auth, prov);
-  return res.user && res.user.email;
-}
-/* Create (or reuse) the real email/password account a seat is being linked to,
-   and send its verification mail. */
-async function createEmailAccount(email, password) {
-  await warmAuth();
-  const A = _authMod, auth = _authInst;
-  try { const cred = await A.createUserWithEmailAndPassword(auth, email, password); try { await A.sendEmailVerification(cred.user); } catch (e) {} return { created: true }; }
-  catch (e) {
-    if (((e && e.code) || "").includes("email-already-in-use")) {
-      try { const c = await A.signInWithEmailAndPassword(auth, email, password); if (!c.user.emailVerified) await A.sendEmailVerification(c.user); } catch (e2) {}
-      return { existed: true };
-    }
-    throw e;
-  }
-}
-/* ---------- username seats, backed by Firebase ----------
-   Each username has a hidden Firebase email/password account so that a plain
-   username+passcode login still satisfies the server-side rules and gets full
-   live access. Firebase needs >=6-char passwords, so the seat passcode is
-   wrapped deterministically. */
-const SEAT_DOMAIN = "seat.ttjteamos.app";
-const seatEmail = (username) => `${String(username || "").toLowerCase()}@${SEAT_DOMAIN}`;
-/* Resolve a Firebase-authenticated email to exactly one team seat, so that a
-   sign-in IS an identity (never "unlock the device, then be anyone"):
-   - a hidden seat email  <username>@seat.ttjteamos.app  → that username's seat
-   - a real Google/company email → the seat whose linked `email` matches it */
-function seatForEmail(users, email) {
+/* Resolve a Firebase-authenticated email to exactly one team member. The
+   signed-in account IS the identity: accounts are created only by the app
+   administrator (Rishi), who records each member's address on their profile,
+   so there is no self-registration and no passcode to guess or publish. */
+function memberForEmail(users, email) {
   if (!email) return null;
   const e = email.toLowerCase();
-  if (e.endsWith("@" + SEAT_DOMAIN)) {
-    const un = e.slice(0, e.length - (SEAT_DOMAIN.length + 1));
-    return (users || []).find((u) => (u.username || "").toLowerCase() === un) || null;
-  }
   return (users || []).find((u) => (u.email || "").toLowerCase() === e) || null;
-}
-const seatSecret = (pass) => `ttj$${pass}`; /* >=6 chars even for a 4-digit passcode */
-/* Sign the device into Firebase as this seat (creating the hidden account on
-   first use). Returns {ok, created} or {ok:false, msg}. Best-effort: if there
-   is no workspace configured it just no-ops so the app still works offline. */
-async function seatFirebaseSignIn(username, pass) {
-  const cfg = effectiveFbConfig(); if (!cfg) return { ok: true, offline: true };
-  const email = seatEmail(username), secret = seatSecret(pass);
-  try {
-    const A = await warmAuth() ? _authMod : await (async () => { await warmAuth(); return _authMod; })();
-    const auth = _authInst;
-    try {
-      await _authMod.signInWithEmailAndPassword(auth, email, secret);
-      return { ok: true };
-    } catch (e) {
-      const code = (e && e.code) || "";
-      if (code.includes("user-not-found") || code.includes("invalid-credential")) {
-        try { await _authMod.createUserWithEmailAndPassword(auth, email, secret); return { ok: true, created: true }; }
-        catch (e2) {
-          if (((e2 && e2.code) || "").includes("email-already-in-use")) return { ok: false, msg: "wrong-pass" };
-          return { ok: false, msg: (e2 && e2.message) || String(e2) };
-        }
-      }
-      if (code.includes("wrong-password")) return { ok: false, msg: "wrong-pass" };
-      return { ok: false, msg: (e && e.message) || String(e) };
-    }
-  } catch (e) { return { ok: false, msg: (e && e.message) || String(e) }; }
-}
-/* Change the signed-in seat's Firebase password (called on the forced first
-   change and any later change). */
-async function seatChangeFirebasePassword(newPass) {
-  try {
-    await warmAuth();
-    const u = _authInst && _authInst.currentUser;
-    if (u) await _authMod.updatePassword(u, seatSecret(newPass));
-    return true;
-  } catch (e) { console.error("seat pw change (fb)", e); return false; }
 }
 /* Compact email sign-in block used on the login gate and in Team & Access. */
 function EmailAuthMini() {
@@ -502,10 +417,10 @@ function EmailAuthMini() {
     <div style={{ marginTop: 10 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
         <Inp value={em} onChange={(e) => setEm(e.target.value)} placeholder="you@company.com" autoCapitalize="none" inputMode="email" />
-        <Inp type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="password (min 6)" />
+        <Inp type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="your password" onKeyDown={(e) => e.key === "Enter" && !busy && em.includes("@") && pw.length >= 6 && go()} />
       </div>
       <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <Btn small onClick={go} disabled={busy || !em.includes("@") || pw.length < 6}>{busy ? <Loader2 size={13} className="spin" /> : <KeyRound size={13} />} Sign in / create with email</Btn>
+        <Btn small onClick={go} disabled={busy || !em.includes("@") || pw.length < 6}>{busy ? <Loader2 size={13} className="spin" /> : <KeyRound size={13} />} Sign in</Btn>
         <Btn small ghost onClick={async () => { if (!em.includes("@")) return setMsg("Type your email first."); setMsg(await emailWorkspaceReset(em.trim())); }}>Reset</Btn>
       </div>
       {msg && <div style={{ fontSize: 11.5, color: C.amber, marginTop: 8, lineHeight: 1.5 }}>{msg}</div>}
@@ -805,66 +720,12 @@ const SectionTitle = ({ eyebrow, title, sub, accent }) => (
 
 
 /* ================= LOGIN ================= */
-function Login({ users, onLogin, onLink, onAttempt, liveOn, liveStatus, authInfo, authNoSeat }) {
+/* One way in: the Firebase account the administrator issued — Google, or an
+   email/password Rishi created. The signed-in address decides which member you
+   are, so there is no passcode to publish, guess, or rotate. */
+function Login({ liveOn, liveStatus, authNoSeat }) {
   useEffect(() => { if (liveStatus === "needauth" || liveStatus === "on") warmAuth(); }, [liveStatus]);
-  const [un, setUn] = useState("");
-  const [pw, setPw] = useState("");
-  const [showPw, setShowPw] = useState(false);
-  const [err, setErr] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [linkStep, setLinkStep] = useState(null); // { u, oldPw } — one-time seat claim: link email/Google
-  const [linkEmail, setLinkEmail] = useState(""); const [linkPass, setLinkPass] = useState("");
-  const [linkMsg, setLinkMsg] = useState("");
-  const tryLogin = async () => {
-    if (busy) return;
-    const uname = un.trim().toLowerCase();
-    const fl = failsLeft(uname);
-    if (fl.count >= 5) {
-      const mins = Math.max(1, Math.ceil((fl.oldest + 15 * 60000 - Date.now()) / 60000));
-      setErr(`Too many failed attempts. This device is locked for ${mins} more minute${mins > 1 ? "s" : ""}.`);
-      return;
-    }
-    setBusy(true);
-    try {
-      const u = users.find((x) => (x.username || "").toLowerCase() === uname);
-      /* Username+passcode is one-time setup only. Once a seat is linked to an
-         email/Google, it can only be opened that way. */
-      if (u && u.linked) { setErr(`This account now signs in with ${u.email || "your linked email"} — use Google or email above.`); setPw(""); return; }
-      const ok = u && !u.locked && (await verifyPassword(u, pw));
-      if (!ok) {
-        const n = recordFail(uname);
-        onAttempt && onAttempt({ un: uname, ok: false });
-        setErr(u && u.locked
-          ? "This account is locked. Contact the Owner to restore access."
-          : n >= 5
-          ? "Too many failed attempts. This device is locked for 15 minutes."
-          : `Incorrect username or passcode.${n >= 3 ? ` ${5 - n} attempt${5 - n === 1 ? "" : "s"} left before a 15-minute lock.` : ""}`);
-        setPw("");
-        return;
-      }
-      clearFails(uname);
-      setLinkStep({ u, oldPw: pw }); setLinkEmail(""); setLinkPass(""); setLinkMsg(""); setErr(""); /* → claim & link */
-    } finally { setBusy(false); }
-  };
-  const doLink = async (provider) => {
-    if (busy) return;
-    if (provider === "email") {
-      if (!linkEmail.includes("@")) return setLinkMsg("Enter the email you'll sign in with.");
-      if (linkPass.length < 6) return setLinkMsg("Set a password of at least 6 characters.");
-    }
-    setBusy(true); setLinkMsg("Linking…");
-    try {
-      await onLink(linkStep.u, linkStep.oldPw, provider === "email" ? { provider: "email", email: linkEmail.trim(), password: linkPass } : { provider: "google" });
-    } catch (e) {
-      setLinkMsg((provider === "google" && /popup|cancel/.test((e && e.code) || "")) ? "Google sign-in was cancelled." : "Couldn't link: " + ((e && e.message) || e));
-    } finally { setBusy(false); }
-  };
-  const submitChange = async () => {
-    if (busy) return;
-    setBusy(true); setErr("");
-    try { await onLogin(linkStep.u, linkStep.oldPw); }
-    finally { setBusy(false); }
-  };
+  const noWorkspace = !effectiveFbConfig();
   return (
     <div style={{ minHeight: "100vh", background: `radial-gradient(1200px 600px at 70% -10%, #241B45 0%, ${C.bg} 55%)`, display: "flex", alignItems: "center", justifyContent: "center", padding: "calc(env(safe-area-inset-top, 0px) + 40px) 20px calc(env(safe-area-inset-bottom, 0px) + 40px)", fontFamily: SANS }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
@@ -881,70 +742,37 @@ function Login({ users, onLogin, onLink, onAttempt, liveOn, liveStatus, authInfo
         {authNoSeat && (
           <div style={{ background: C.panel, border: `1px solid ${C.red}66`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
             <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}>
-              {authNoSeat.includes("(unverified)")
-                ? <>Your email <b>{authNoSeat.replace(" (unverified)", "")}</b> hasn't been verified yet — open the verification link we mailed you, then sign in again.</>
-                : <>You're signed in as <b>{authNoSeat}</b>, but that email isn't linked to a team member yet. Ask Rishi to add it to your profile (Team &amp; Access), or sign in with your username instead.</>}
+              {authNoSeat.includes("(unconfirmed)")
+                ? <>Nearly there — confirm <b>{authNoSeat.replace(" (unconfirmed)", "")}</b> by opening the link we emailed you, then sign in again.</>
+                : <>You're signed in as <b>{authNoSeat}</b>, but that address isn't on any team member's profile yet. Ask Rishi to add it in Team &amp; Access.</>}
             </div>
             <div style={{ marginTop: 10 }}><Btn ghost onClick={googleSignOut}>Sign out / use another account</Btn></div>
           </div>
         )}
 
-        {linkStep ? (
-          <div style={{ background: C.panel, border: `1px solid ${C.gold}66`, borderRadius: 12, padding: 22 }}>
-            <div style={{ fontFamily: SERIF, fontSize: 18, color: C.text }}>Set up {linkStep.u.name.split(" ")[0]}'s login</div>
-            <div style={{ fontSize: 12.5, color: C.mute, marginTop: 6, lineHeight: 1.6 }}>Passcode confirmed. Now link the email or Google account you'll use from now on — after this, <b>this account only opens with that email/Google</b>, not the passcode.</div>
-            <div style={{ marginTop: 16 }}>
-              <Btn onClick={() => doLink("google")} disabled={busy}>{busy ? <Loader2 size={14} className="spin" /> : <KeyRound size={14} />} Link with Google</Btn>
+        <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, padding: 22 }}>
+          {noWorkspace ? (
+            <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.6 }}>
+              This device isn't connected to the shared workspace, so there's nothing to sign in to. Ask Rishi to reconnect it.
             </div>
-            <div style={{ fontSize: 11.5, color: C.mute, margin: "14px 0 6px", borderTop: `1px solid ${C.lineSoft}`, paddingTop: 12 }}>Or link an email you'll sign in with (you'll verify it once by mail):</div>
-            <Field label="Your email"><Inp value={linkEmail} autoCapitalize="none" inputMode="email" onChange={(e) => { setLinkEmail(e.target.value); setLinkMsg(""); }} placeholder="you@company.com" /></Field>
-            <div style={{ marginTop: 10 }}><Field label="Choose a password (min 6)"><Inp type={showPw ? "text" : "password"} value={linkPass} onChange={(e) => { setLinkPass(e.target.value); setLinkMsg(""); }} /></Field></div>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12, color: C.mute, cursor: "pointer" }}>
-              <input type="checkbox" checked={showPw} onChange={(e) => setShowPw(e.target.checked)} /> Show password
-            </label>
-            <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Btn onClick={() => doLink("email")} disabled={busy || !linkEmail.includes("@") || linkPass.length < 6}>{busy ? <Loader2 size={14} className="spin" /> : <ShieldCheck size={14} />} Link this email</Btn>
-              <Btn ghost onClick={() => { setLinkStep(null); setPw(""); setErr(""); }}>Back</Btn>
-            </div>
-            {linkMsg && <div style={{ color: linkMsg === "Linking…" ? C.mute : C.amber, fontSize: 12, marginTop: 12, lineHeight: 1.5 }}>{linkMsg}</div>}
-          </div>
-        ) : (
-          <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, padding: 22 }}>
-            <Field label="Username">
-              <Inp value={un} autoFocus autoCapitalize="none" autoCorrect="off" spellCheck={false}
-                onChange={(e) => { setUn(e.target.value); setErr(""); }}
-                onKeyDown={(e) => e.key === "Enter" && tryLogin()} placeholder="e.g. rishi" />
-            </Field>
-            <div style={{ marginTop: 14 }}>
-              <Field label="Password">
-                <div style={{ position: "relative" }}>
-                  <Inp type={showPw ? "text" : "password"} value={pw}
-                    onChange={(e) => { setPw(e.target.value); setErr(""); }}
-                    onKeyDown={(e) => e.key === "Enter" && tryLogin()} placeholder="••••••••" style={{ paddingRight: 38 }} />
-                  <Eye size={15} color={showPw ? C.gold : C.faint} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", cursor: "pointer" }} onClick={() => setShowPw(!showPw)} />
-                </div>
-              </Field>
-            </div>
-            {err && <div style={{ color: C.red, fontSize: 12, marginTop: 12 }}>{err}</div>}
-            <div style={{ marginTop: 18 }}>
-              <Btn onClick={tryLogin} disabled={!un.trim() || !pw || busy}>{busy ? <Loader2 size={14} className="spin" /> : <KeyRound size={14} />} Sign in</Btn>
-            </div>
-            <div style={{ color: C.faint, fontSize: 11, marginTop: 12, lineHeight: 1.6 }}>
-              First time in? Use the passcode the Owner gave you — you'll set your own password next.
-            </div>
-            {effectiveFbConfig() && (
-              <div style={{ marginTop: 16, borderTop: `1px solid ${C.lineSoft}`, paddingTop: 14 }}>
-                <div style={{ fontSize: 11, color: C.mute, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Or sign in as yourself</div>
-                <Btn ghost onClick={googleSignIn}><KeyRound size={14} /> Continue with Google</Btn>
-                <div style={{ fontSize: 11.5, color: C.faint, margin: "12px 0 4px" }}>With your email &amp; password:</div>
-                <EmailAuthMini />
-                <div style={{ fontSize: 10.5, color: C.faint, marginTop: 8, lineHeight: 1.5 }}>Email / Google sign you in as the team member they're linked to. On iPhone/iPad, username + passcode is the most reliable.</div>
+          ) : (
+            <>
+              <Btn onClick={googleSignIn}><KeyRound size={14} /> Continue with Google</Btn>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "16px 0 12px" }}>
+                <div style={{ flex: 1, height: 1, background: C.lineSoft }} />
+                <div style={{ fontSize: 10.5, letterSpacing: 1.4, textTransform: "uppercase", color: C.faint }}>or</div>
+                <div style={{ flex: 1, height: 1, background: C.lineSoft }} />
               </div>
-            )}
-          </div>
-        )}
+              <div style={{ fontSize: 11.5, color: C.mute, marginBottom: 8 }}>Sign in with the email &amp; password Rishi gave you:</div>
+              <EmailAuthMini />
+              <div style={{ color: C.faint, fontSize: 11, marginTop: 14, lineHeight: 1.6, borderTop: `1px solid ${C.lineSoft}`, paddingTop: 12 }}>
+                No account yet? Send Rishi your email address and he'll create one for you. Accounts can only be created by him — that's deliberate.
+              </div>
+            </>
+          )}
+        </div>
         <div style={{ textAlign: "center", fontSize: 11, color: liveOn ? C.green : C.faint, marginTop: 14 }}>
-          {liveOn ? "● Live shared workspace connected" : "Standalone mode — data stays on this device until the Owner connects the shared workspace."}
+          {liveOn ? "● Live shared workspace connected" : "Connecting to the shared workspace…"}
         </div>
       </div>
     </div>
@@ -3601,7 +3429,7 @@ function SecurityPage({ state, setState, user, liveStatus }) {
 
   return (
     <div>
-      <SectionTitle eyebrow="Records · Owner" title="Security" sub="Who is signed in where, every change anyone makes, and anything that looks off. Passwords are stored as salted hashes; sign-outs and locks reach every connected device through the live workspace." />
+      <SectionTitle eyebrow="Records · Owner" title="Security" sub="Who is signed in where, every change anyone makes, and anything that looks off. Sign-in is handled entirely by Google — this app stores no passwords. Sign-outs and locks are housekeeping within the app, not a server-side block; that arrives with the server layer." />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 14 }}>
         <KPI label="Online now" value={online.length} sub="active in last 5 min" tone={C.green} />
         <KPI label="Sessions on record" value={sessions.length} sub="devices that signed in" tone={C.blue} />
@@ -4014,20 +3842,17 @@ function Team({ state, setState, user, liveStatus, authInfo }) {
     readAllowlist().then((e) => { setWl(e); setWlText((e || []).join("\n")); });
   }, [canWrite]);
   const saveAllowlist = async () => {
-    const typed = wlText.split(/[\n,;]+/).map((x) => x.trim().toLowerCase()).filter((x) => x.includes("@") && !x.endsWith("@" + SEAT_DOMAIN));
-    /* every username seat's hidden account is always allowed (that's how
-       username+passcode gets in); plus any real Google/email addresses typed. */
-    const seats = (state.users || []).map((u) => seatEmail(u.username));
-    /* every real email a member has linked to their seat stays authorized, so a
-       re-save of the list can never lock a linked member out. */
-    const linked = (state.users || []).map((u) => (u.email || "").toLowerCase()).filter((e) => e.includes("@"));
-    const emails = Array.from(new Set([...(authInfo?.email ? [authInfo.email.toLowerCase()] : []), ...typed, ...seats, ...linked]));
+    const typed = wlText.split(/[\n,;]+/).map((x) => x.trim().toLowerCase()).filter((x) => x.includes("@"));
+    /* Every address recorded on a member's profile stays authorised, so saving
+       the list can never lock out someone who is already a member. */
+    const members = (state.users || []).map((u) => (u.email || "").toLowerCase()).filter((e) => e.includes("@"));
+    const emails = Array.from(new Set([...(authInfo?.email ? [authInfo.email.toLowerCase()] : []), ...typed, ...members]));
     setWlBusy(true);
     try {
       await writeAllowlist(emails);
       setWl(emails); setWlText(emails.join("\n"));
       setState((s) => withLog(s, user.name, `updated workspace access list (${emails.length} account${emails.length === 1 ? "" : "s"})`));
-      alert(`Saved — ${emails.length} Google account${emails.length === 1 ? "" : "s"} can reach the workspace once the strict rules are published.`);
+      alert(`Saved — ${emails.length} account${emails.length === 1 ? "" : "s"} can reach the workspace.`);
     } catch (e) { alert("Couldn't save the access list: " + (e.message || e)); }
     setWlBusy(false);
   };
@@ -4045,15 +3870,11 @@ service firebase.storage {
 service cloud.firestore {
   match /databases/{database}/documents {
     function verified() {
-      return request.auth != null && (
-        request.auth.token.email_verified == true ||
-        request.auth.token.email.matches('.*@seat[.]ttjteamos[.]app$')
-      );
+      return request.auth != null && request.auth.token.email_verified == true;
     }
     function admin() {
       return verified() && request.auth.token.email in [
-        'rishi@kkjpl.com', 'rishi@seat.ttjteamos.app',
-        'nitin@kkjpl.com', 'nitin@seat.ttjteamos.app'
+        'rishi@kkjpl.com', 'nitin@kkjpl.com'
       ];
     }
     function listed() {
@@ -4074,17 +3895,13 @@ service cloud.firestore {
 }`;
   const save = async () => {
     const un = (edit.username || "").trim().toLowerCase();
-    if (state.users.some((u) => u.id !== edit.id && (u.username || "").toLowerCase() === un)) return alert("That username is already in use.");
-    const rec = { ...edit, username: un, id: edit.id || uid() };
-    /* a password typed here is stored only as a salted hash */
-    if ((edit.newPw || "").length >= 4) {
-      const salt = genSalt();
-      rec.pwSalt = salt; rec.pwHash = await hashPassword(edit.newPw, salt); rec.password = ""; rec.pwChanged = false; /* admin-set password is temporary — member must change it on next login */
-    }
-    delete rec.newPw;
+    const em = (edit.email || "").trim().toLowerCase();
+    if (state.users.some((u) => u.id !== edit.id && (u.username || "").toLowerCase() === un)) return alert("That short name is already in use.");
+    if (em && state.users.some((u) => u.id !== edit.id && (u.email || "").toLowerCase() === em)) return alert("That email is already on another member's profile — one address, one member.");
+    const rec = { ...edit, username: un, email: em, id: edit.id || uid() };
     setState((s) => withLog(
       { ...s, users: edit.id ? s.users.map((u) => (u.id === edit.id ? rec : u)) : [...s.users, rec] },
-      user.name, `${edit.id ? "updated" : "added"} team member ${rec.name}${(edit.newPw || "").length >= 4 && edit.id ? " (password reset)" : ""}`));
+      user.name, `${edit.id ? "updated" : "added"} team member ${rec.name}`));
     setEdit(null);
   };
   const del = (id) => {
@@ -4166,7 +3983,7 @@ service cloud.firestore {
           <input type="file" accept="application/json" style={{ display: "none" }} onChange={importJson} />
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", background: "transparent", color: C.gold, border: `1px solid ${C.gold}66`, borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, fontFamily: SANS }}><Download size={14} style={{ transform: "rotate(180deg)" }} /> Import JSON (replace)</span>
         </label>}
-        {canWrite && <Btn onClick={() => setEdit({ id: "", name: "", dept: "leasing", subRole: "", tier: "member", username: "", password: "", newPw: "" })}><Plus size={14} /> Add member</Btn>}
+        {canWrite && <Btn onClick={() => setEdit({ id: "", name: "", dept: "leasing", subRole: "", tier: "member", username: "", email: "" })}><Plus size={14} /> Add member</Btn>}
       </div>
       {deptOrder.map((d) => {
         const dUsers = state.users.filter((u) => u.dept === d);
@@ -4175,15 +3992,19 @@ service cloud.firestore {
         return (
           <Card key={d} title={<span style={{ color: D.accent }}>{D.label}</span>} style={{ marginBottom: 12 }} pad={0}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead><tr><Th>Member</Th><Th>Sub-role</Th><Th>Tier</Th><Th>Username</Th><Th>Password</Th>{canWrite && <Th right>Actions</Th>}</tr></thead>
+              <thead><tr><Th>Member</Th><Th>Sub-role</Th><Th>Tier</Th><Th>Sign-in email</Th>{canWrite && <Th right>Actions</Th>}</tr></thead>
               <tbody>
                 {dUsers.map((u) => (
                   <tr key={u.id}>
                     <Td style={{ fontWeight: 600 }}>{u.name}{u.exec && <span style={{ color: C.gold, fontSize: 11, marginLeft: 6 }}>({u.exec})</span>}</Td>
                     <Td style={{ color: C.mute, fontSize: 12 }}>{u.subRole}</Td>
                     <Td><Badge text={TIERS[u.tier]?.label || u.tier} color={TIERS[u.tier]?.color || C.faint} /></Td>
-                    <Td style={{ color: C.mute, fontSize: 12 }}>{u.username}</Td>
-                    <Td style={{ color: C.mute, fontSize: 12 }}>{canWrite ? (u.password || <span style={{ color: C.green }}>hashed ✓</span>) : "••••••"}{u.locked && <Badge text="locked" color={C.red} />}</Td>
+                    <Td style={{ color: C.mute, fontSize: 12 }}>
+                      {u.email
+                        ? <span style={{ color: C.text }}>{u.email}</span>
+                        : <span style={{ color: C.amber }}>no account yet</span>}
+                      {u.locked && <Badge text="locked" color={C.red} />}
+                    </Td>
                     {canWrite && <Td right>
                       <Pencil size={14} color={C.mute} style={{ cursor: "pointer", marginRight: 12 }} onClick={() => setEdit({ ...u })} />
                       <Trash2 size={14} color={C.red} style={{ cursor: "pointer" }} onClick={() => del(u.id)} />
@@ -4276,18 +4097,19 @@ service cloud.firestore {
             </div>
           </div>
           <div style={{ fontSize: 12.5, color: C.mute, marginTop: 14, lineHeight: 1.75 }}>
-            <b style={{ color: C.text }}>One-time setup to enforce this:</b><br />
-            1. Firebase console → <b>Authentication → Sign-in method</b>: enable <b>Google</b> and (for non-Google mails) <b>Email/Password</b>.<br />
-            2. Authentication → <b>Settings → Authorized domains</b> → add <b>rishiikothari.github.io</b>.<br />
-            3. Here: sign in with Google above, add the team's Google emails, <b>Save access list</b>.<br />
-            4. Firestore console → <b>Rules</b> → replace with the rules below → <b>Publish</b>. From that moment only listed accounts can touch the data — with or without the app.
+            <b style={{ color: C.text }}>Onboarding a member — and the setup that keeps it safe:</b><br />
+            1. They send you their email; you put it on their profile above. Google addresses need nothing further.<br />
+            2. For a non-Google address: Firebase console → <b>Authentication → Users → Add user</b> — same email, a password you pass to them. They confirm the address by mail on first sign-in.<br />
+            3. Here: <b>Save access list</b> so the new address is authorised.<br />
+            4. Firebase console → <b>Authentication → Settings → User actions</b>: switch <b>off</b> “Enable create (sign-up)”. This is what stops anyone creating an account for an address you never issued.<br />
+            5. Firestore console → <b>Rules</b> → replace with the rules below → <b>Publish</b>. From then on only listed, confirmed accounts can touch the data — with or without the app.
           </div>
           <div style={{ marginTop: 10, position: "relative" }}>
             <pre style={{ background: C.panel3, border: `1px solid ${C.line}`, borderRadius: 8, padding: 12, fontSize: 11, color: C.text, overflowX: "auto", lineHeight: 1.5 }}>{RULES_TEXT}</pre>
             <Btn small ghost onClick={() => { try { navigator.clipboard.writeText(RULES_TEXT); alert("Rules copied — paste into Firestore → Rules and Publish."); } catch (e) { alert("Copy failed — select the text manually."); } }}>Copy rules</Btn>
           </div>
           <div style={{ fontSize: 11.5, color: C.faint, marginTop: 10, lineHeight: 1.6 }}>
-            The admin line in the rules is pinned to your signed-in Google account — only you can change the access list, even among owners. Devices without an allowed Google sign-in keep working offline but never see team data.
+            The admin line in the rules is pinned to your own address — only you can change the access list, even among owners. Devices without an authorised, confirmed sign-in keep working offline but never see team data.
           </div>
           <div style={{ marginTop: 14, borderTop: `1px solid ${C.lineSoft}`, paddingTop: 12 }}>
             <div style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>Storage rules (for approval attachments &amp; imported media)</div>
@@ -4302,7 +4124,7 @@ service cloud.firestore {
       )}
       <div style={{ fontSize: 12, color: C.faint, marginTop: 4, maxWidth: 760, lineHeight: 1.6 }}>
         <AlertTriangle size={12} style={{ verticalAlign: -1, marginRight: 5 }} color={C.amber} />
-        Password access is a gate for day-to-day discipline, not bank-grade security — anyone with the app link shares the same underlying data store, and confidential registers should be treated accordingly. For hard isolation of agencies and brokers, the next step is a real backend with server-side auth; this schema maps to it 1:1.
+        Sign-in is Google or an email account you create — the app stores no passwords of its own. Be aware, though, that everyone who can reach the workspace shares one underlying dataset: the page-by-page permissions here govern the app, not the database. Hard isolation of agencies and brokers arrives with the server layer, which moves approvals, roles and the audit trail out of the browser's reach.
       </div>
 
       {edit && (
@@ -4320,23 +4142,20 @@ service cloud.firestore {
                 {Object.entries(TIERS).map(([k, t]) => <option key={k} value={k}>{t.label}</option>)}
               </select>
             </Field>
-            <Field label="Username"><Inp value={edit.username} autoCapitalize="none" onChange={(e) => setEdit({ ...edit, username: e.target.value.toLowerCase().replace(/\s+/g, ".") })} placeholder="e.g. leasing.head" /></Field>
-            <Field label="Linked email (optional — lets them sign in with Google/email)"><Inp value={edit.email || ""} autoCapitalize="none" inputMode="email" onChange={(e) => setEdit({ ...edit, email: e.target.value.trim().toLowerCase() })} placeholder="name@company.com" /></Field>
-            <Field label={edit.id ? "Reset password (blank = keep current)" : "Password (min 4 characters — longer is safer)"}>
-              <Inp value={edit.newPw || ""} onChange={(e) => setEdit({ ...edit, newPw: e.target.value })} placeholder={edit.id ? "••••••••" : ""} />
-            </Field>
+            <Field label="Short name (for logs)"><Inp value={edit.username} autoCapitalize="none" onChange={(e) => setEdit({ ...edit, username: e.target.value.toLowerCase().replace(/\s+/g, ".") })} placeholder="e.g. leasing.head" /></Field>
+            <Field label="Sign-in email — this is their identity"><Inp value={edit.email || ""} autoCapitalize="none" inputMode="email" onChange={(e) => setEdit({ ...edit, email: e.target.value.trim().toLowerCase() })} placeholder="name@company.com" /></Field>
           </div>
-          {edit.id && edit.linked && (
-            <div style={{ marginTop: 14, padding: "11px 13px", background: `${C.amber}12`, border: `1px solid ${C.amber}44`, borderRadius: 8, fontSize: 12.5, color: C.text, lineHeight: 1.55 }}>
-              <b>Signs in with {edit.email || "a linked email/Google"}.</b> The username + passcode no longer opens this seat. If they lost access to that email, un-link to let them set it up again with the passcode below.
-              <div style={{ marginTop: 9 }}>
-                <Btn small ghost onClick={() => setEdit({ ...edit, linked: false, newPw: "" })}><KeyRound size={12} /> Un-link — allow passcode setup again</Btn>
-              </div>
-            </div>
-          )}
+          <div style={{ marginTop: 14, padding: "11px 13px", background: `${C.blue}12`, border: `1px solid ${C.blue}44`, borderRadius: 8, fontSize: 12.5, color: C.text, lineHeight: 1.6 }}>
+            {edit.email
+              ? <><b>{edit.email}</b> opens this profile — whoever signs in with that address is {edit.name || "this member"}.{" "}
+                  {edit.email.endsWith("@gmail.com") || edit.email.endsWith("@kkjpl.com")
+                    ? "They can use Continue with Google straight away."
+                    : "Create their account once in Firebase console → Authentication → Add user (same email, a password you give them), then they sign in and confirm the address by mail."}</>
+              : <>Add the email they'll sign in with. Until then this profile exists on the org chart but nobody can open it — there's no passcode any more, by design.</>}
+          </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
             <Btn ghost onClick={() => setEdit(null)}>Cancel</Btn>
-            <Btn onClick={save} disabled={!edit.name || !(edit.username || "").trim() || (!edit.id && (edit.newPw || "").length < 4) || ((edit.newPw || "").length > 0 && edit.newPw.length < 4)}>Save member</Btn>
+            <Btn onClick={save} disabled={!edit.name || !(edit.username || "").trim()}>Save member</Btn>
           </div>
         </Modal>
       )}
@@ -4407,24 +4226,19 @@ export default function App() {
   }, [flushLive]);
   useEffect(() => { if (liveStatus === "on") flushLive(); }, [liveStatus, flushLive]);
 
-  /* ---------- one-shot hardening: no plaintext passcodes at rest ----------
-     Seed users carry a starter passcode in plaintext until first login; hash
-     any that remain so neither localStorage nor the shared doc ever stores a
-     readable passcode. verifyPassword prefers the hash, and seat-linking uses
-     the passcode the member types — so nothing else changes. */
-  const hardened = React.useRef(false);
+  /* ---------- one-shot cleanup: purge retired credential fields ----------
+     Sign-in is Firebase-only now, so any passcode, hash or salt still sitting
+     in a saved workspace is dead weight that should not be there. Strip it once
+     and record that we did. */
+  const purged = React.useRef(false);
   useEffect(() => {
-    if (!state || hardened.current) return;
-    const plain = (state.users || []).filter((u) => u.password && !u.pwHash);
-    if (!plain.length) return;
-    hardened.current = true;
-    (async () => {
-      const ups = {};
-      for (const u of plain) { const salt = genSalt(); ups[u.id] = { pwSalt: salt, pwHash: await hashPassword(u.password, salt), password: "" }; }
-      setState((s) => withLog(
-        { ...s, users: s.users.map((u) => (ups[u.id] && u.password && !u.pwHash) ? { ...u, ...ups[u.id] } : u) },
-        "System", "hardened stored passcodes — hashed, plaintext removed"));
-    })();
+    if (!state || purged.current) return;
+    const stale = (state.users || []).filter((u) => u.password || u.pwHash || u.pwSalt || u.linked !== undefined || u.pwChanged !== undefined);
+    if (!stale.length) return;
+    purged.current = true;
+    setState((s) => withLog(
+      { ...s, users: s.users.map(({ password, pwHash, pwSalt, linked, pwChanged, ...u }) => u) },
+      "System", "removed retired passcode fields — sign-in is Google / email only"));
   }, [state]);
 
   useEffect(() => {
@@ -4435,24 +4249,26 @@ export default function App() {
 
   useEffect(() => {
     let booted = false;
-    let authEmail = null; /* set once the Firebase session resolves */
+    let authEmail = null;   /* set only once a usable Firebase session resolves */
+    let authBlocked = false; /* signed in, but not allowed to become an identity */
     const finishBoot = (st, fromRemote) => {
       if (fromRemote) remoteApply.current = true;
       setState(st);
       if (booted) return;
       booted = true;
-      /* Identity = whoever is signed in. A Firebase session (Google, email, or
-         a username's hidden seat account) resolves to exactly one seat and wins
-         over any locally-saved seat, so there is no "unlock then be anyone". */
-      const byAuth = authEmail ? seatForEmail(st.users, authEmail) : null;
+      /* Identity is the signed-in Firebase account, full stop. The locally saved
+         session may only restore the page you were on — never who you are —
+         except with no workspace configured, where there is no auth to consult
+         and no shared data to protect. */
+      const byAuth = authEmail ? memberForEmail(st.users, authEmail) : null;
       const sess = loadSession();
-      const bySess = sess && st.users.find((x) => x.id === sess.userId);
-      const u = byAuth || (authEmail ? null : bySess); /* if Firebase-authed but unlinked, don't fall back to a saved seat */
+      const cfg = effectiveFbConfig();
+      const u = byAuth || (!cfg && !authBlocked ? sess && st.users.find((x) => x.id === sess.userId) : null);
       if (u) {
         setUser(u);
         if (sess && sess.page && PAGES.some((pg) => pg.key === sess.page && pageAllowed(pg, u))) setPage(sess.page);
-      } else if (authEmail && !byAuth) {
-        setAuthNoSeat(authEmail); /* signed in, but this email isn't linked to a team member */
+      } else if (authEmail) {
+        setAuthNoSeat(authEmail); /* signed in, but no member carries this address */
       }
     };
     (async () => {
@@ -4476,11 +4292,12 @@ export default function App() {
       try { authUser = await getAuthUser(cfg); } catch (e) { console.error("auth init failed", e); }
       if (authUser) {
         const em = (authUser.email || "").toLowerCase();
-        if (em && !authUser.emailVerified && !em.endsWith("@" + SEAT_DOMAIN)) {
-          /* an unverified email session must not become an identity — the
-             Firestore rules already deny it server-side; mirror that here
-             instead of letting it open the locally-cached workspace */
-          setAuthNoSeat(em + " (unverified)");
+        if (em && !authUser.emailVerified) {
+          /* An unconfirmed address must not become an identity. The rules deny
+             it server-side; refuse it here too, and don't let a saved session
+             quietly stand in for it. */
+          authBlocked = true;
+          setAuthNoSeat(em + " (unconfirmed)");
         } else {
           setAuthInfo({ email: authUser.email || "", uid: authUser.uid });
           authEmail = authUser.email || null;
@@ -4536,6 +4353,21 @@ export default function App() {
   }, []);
 
   useEffect(() => { if (user) saveSession({ userId: user.id, page }); }, [user, page]);
+
+  /* Record the sign-in once per app load, so the Security page shows who opened
+     the workspace from which device and under which address. */
+  const signInLogged = React.useRef(false);
+  useEffect(() => {
+    if (!user || !state || signInLogged.current) return;
+    signInLogged.current = true;
+    const now = Date.now();
+    const em = (authInfo && authInfo.email) || user.email || "";
+    setState((s) => ({
+      ...s,
+      loginEvents: [{ ts: now, un: em || user.username, ok: true, uid: user.id, d: DEVICE_ID, ua: uaInfo() }, ...(s.loginEvents || [])].slice(0, 300),
+      sessions: { ...(s.sessions || {}), [`${user.id}|${DEVICE_ID}`]: { u: user.id, d: DEVICE_ID, ua: uaInfo(), em, in: now, seen: now } },
+    }));
+  }, [user, state, authInfo]);
 
   useEffect(() => {
     if (!state) return;
@@ -4593,45 +4425,7 @@ export default function App() {
   if (!state) {
     return <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", color: C.mute, fontFamily: SANS, fontSize: 14 }}>Loading TTJ Team OS…</div>;
   }
-  if (!user) return <Login users={state.users} liveOn={liveStatus === "on"} liveStatus={liveStatus} authInfo={authInfo} authNoSeat={authNoSeat}
-    onAttempt={({ un, ok }) => {
-      setState((s) => ({ ...s, loginEvents: [{ ts: Date.now(), un, ok, uid: null, d: DEVICE_ID, ua: uaInfo() }, ...(s.loginEvents || [])].slice(0, 300) }));
-    }}
-    onLink={async (u, oldPw, opts) => {
-      const now = Date.now();
-      /* One-time seat claim → link an email/Google that becomes the only way in.
-         Do the linkage writes while signed into the seat's (allowlisted)
-         account so they persist even before the real email is authorized. */
-      await seatFirebaseSignIn(u.username, oldPw);
-      let email = "";
-      if (opts.provider === "email") email = (opts.email || "").trim().toLowerCase();
-      else { email = ((await googlePopupEmail()) || "").toLowerCase(); await seatFirebaseSignIn(u.username, oldPw); }
-      if (!email || !email.includes("@")) throw new Error("Couldn't read the email to link.");
-      if (state.users.some((x) => x.id !== u.id && (x.email || "").toLowerCase() === email)) throw new Error("That email is already linked to another member.");
-      const up = { email, linked: true, pwChanged: true };
-      const cur = latestState.current || state;
-      const next = { ...cur, users: cur.users.map((x) => x.id === u.id ? { ...x, ...up } : x) };
-      try { await pushLive(next); } catch (e) {}                              /* persist linkage as the seat */
-      try { const al = (await readAllowlist()) || []; if (!al.map((x) => (x || "").toLowerCase()).includes(email)) await writeAllowlist([...al, email]); } catch (e) {}
-      if (opts.provider === "email") { try { await createEmailAccount(email, opts.password); } catch (e) {} }
-      setState((s) => ({
-        ...s,
-        users: s.users.map((x) => x.id === u.id ? { ...x, ...up } : x),
-        loginEvents: [{ ts: now, un: u.username, ok: true, uid: u.id, d: DEVICE_ID, ua: uaInfo() }, ...(s.loginEvents || [])].slice(0, 300),
-        sessions: { ...(s.sessions || {}), [`${u.id}|${DEVICE_ID}`]: { u: u.id, d: DEVICE_ID, ua: uaInfo(), em: email, in: now, seen: now } },
-      }));
-      setUser({ ...u, ...up }); setPage("overview"); saveSession({ userId: u.id, page: "overview", loginTs: now });
-    }}
-    onLogin={async (u, pw) => {
-      const now = Date.now();
-      setState((s) => ({
-        ...s,
-        loginEvents: [{ ts: now, un: u.username, ok: true, uid: u.id, d: DEVICE_ID, ua: uaInfo() }, ...(s.loginEvents || [])].slice(0, 300),
-        sessions: { ...(s.sessions || {}), [`${u.id}|${DEVICE_ID}`]: { u: u.id, d: DEVICE_ID, ua: uaInfo(), em: (authInfo && authInfo.email) || seatEmail(u.username), in: now, seen: now } },
-      }));
-      setUser(u); setPage("overview"); saveSession({ userId: u.id, page: "overview", loginTs: now });
-    }} />;
-
+  if (!user) return <Login liveOn={liveStatus === "on"} liveStatus={liveStatus} authNoSeat={authNoSeat} />;
   const D = DEPTS[user.dept];
   const myPages = PAGES.filter((p) => pageAllowed(p, user));
   const groups = ["Daily","Workspaces","Property","Records"];
