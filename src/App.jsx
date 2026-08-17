@@ -9,6 +9,11 @@ import {
   Menu, Upload, Film, Image as ImageIcon, FileCheck2,
 } from "lucide-react";
 import * as WA from "./importer.js";
+/* The security rules shown in Team & Access are read from the very files that
+   `npm run deploy:rules` publishes, so what you read here is always what is
+   actually enforced — no second copy to drift out of date. */
+import FIRESTORE_RULES from "../firestore.rules?raw";
+import STORAGE_RULES from "../storage.rules?raw";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
   LineChart, Line, Legend, ReferenceLine,
@@ -3973,43 +3978,8 @@ function Team({ state, setState, user, liveStatus, authInfo }) {
     } catch (e) { notify("Couldn't save the access list: " + (e.message || e)); }
     setWlBusy(false);
   };
-  const STORAGE_RULES_TEXT = `rules_version = '2';
-service firebase.storage {
-  match /b/{bucket}/o {
-    match /{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null
-        && request.resource.size < 15 * 1024 * 1024;
-    }
-  }
-}`;
-  const RULES_TEXT = `rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    function verified() {
-      return request.auth != null && request.auth.token.email_verified == true;
-    }
-    function admin() {
-      return verified() && request.auth.token.email in [
-        'rishi@kkjpl.com', 'nitin@kkjpl.com'
-      ];
-    }
-    function listed() {
-      return verified() && (
-        !exists(/databases/$(database)/documents/kkbp/allowlist) ||
-        request.auth.token.email in get(/databases/$(database)/documents/kkbp/allowlist).data.emails
-      );
-    }
-    match /kkbp/state {
-      allow read, write: if admin() || listed();
-    }
-    match /kkbp/allowlist {
-      allow read: if request.auth != null;
-      allow write: if admin() ||
-        (verified() && !exists(/databases/$(database)/documents/kkbp/allowlist));
-    }
-  }
-}`;
+  const STORAGE_RULES_TEXT = STORAGE_RULES;
+  const RULES_TEXT = FIRESTORE_RULES;
   const save = async () => {
     const un = (edit.username || "").trim().toLowerCase();
     const em = (edit.email || "").trim().toLowerCase();
@@ -4221,7 +4191,8 @@ service cloud.firestore {
             2. For a non-Google address: Firebase console → <b>Authentication → Users → Add user</b> — same email, a password you pass to them. They confirm the address by mail on first sign-in.<br />
             3. Here: <b>Save access list</b> so the new address is authorised.<br />
             4. Firebase console → <b>Authentication → Settings → User actions</b>: switch <b>off</b> “Enable create (sign-up)”. This is what stops anyone creating an account for an address you never issued.<br />
-            5. Firestore console → <b>Rules</b> → replace with the rules below → <b>Publish</b>. From then on only listed, confirmed accounts can touch the data — with or without the app.
+            5. Every host the app is served from must be listed under <b>Authentication → Settings → Authorized domains</b> — sign-in fails anywhere else.<br />
+            6. Rules are now versioned in the repo (<code>firestore.rules</code>, <code>storage.rules</code>) and published with <code>npm run deploy:rules</code>. The copies below are what that command sends; pasting them into the console by hand still works.
           </div>
           <div style={{ marginTop: 10, position: "relative" }}>
             <pre style={{ background: C.panel3, border: `1px solid ${C.line}`, borderRadius: 8, padding: 12, fontSize: 11, color: C.text, overflowX: "auto", lineHeight: 1.5 }}>{RULES_TEXT}</pre>

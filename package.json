@@ -7,7 +7,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "vite build && firebase deploy --only hosting",
+    "deploy:rules": "firebase deploy --only firestore:rules,storage:rules",
+    "push:google": "git push google HEAD:main"
   },
   "dependencies": {
     "@zip.js/zip.js": "^2.8.34",
