@@ -23,8 +23,12 @@ const BRAND_PURPLE = "#3F0099"; /* sampled from the official logo file */
 const C = {
   bg: "#110D1F", panel: "#181329", panel2: "#1F1933", panel3: "#141021",
   line: "#2E2748", lineSoft: "#251F3C",
+  /* field edges need 3:1 against their fill to be perceivable (WCAG 1.4.11);
+     the decorative `line` above is too quiet for that job */
+  lineInput: "#6E5FAB",
   gold: "#F79A2E", goldDim: "#B4722C",
-  text: "#F5F0E4", mute: "#A8A2C0", faint: "#6E6890",
+  /* `faint` carries 10–12px captions, so it has to clear 4.5:1 for normal text */
+  text: "#F5F0E4", mute: "#A8A2C0", faint: "#817AAA",
   green: "#6BC59A", amber: "#E9A94E", red: "#E5765E", blue: "#8FADE3",
   purple: "#AC97DE", teal: "#6FC5C0", rose: "#D68F9F",
 };
@@ -361,7 +365,7 @@ function googleSignIn() {
     .catch((e) => {
       const code = (e && e.code) || "";
       if (/popup-closed|cancelled-popup|popup-blocked/.test(code)) return; /* user closed it — no scary alert */
-      alert("Google sign-in didn't complete on this browser (common on iPhone/iPad Safari). The most reliable way in is the email option below — it works on every device.");
+      notify("Google sign-in didn't complete on this browser (common on iPhone/iPad Safari). The most reliable way in is the email option below — it works on every device.");
     });
 }
 async function googleSignOut() {
@@ -550,6 +554,29 @@ function auditDiff(prev, next, actor) {
 }
 
 /* ================= CALCS & HELPERS ================= */
+/* Leased area has two possible sources that can disagree: the mall layout
+   (zones mapped to a tenant) and the area recorded on the tenant itself. A
+   signed deal nobody has mapped to a zone used to contribute rent but no area,
+   so the board view could show real monthly revenue beside 0% occupancy. Count
+   mapped zones, add signed tenants that have no zone, and hand back those
+   tenants so the gap is stated rather than silently absorbed. When no layout
+   has been entered at all, occupancy is genuinely unknown — say so instead of
+   inventing a denominator. */
+const SIGNED_STATUS = ["Agreement", "Fit-out", "Operational"];
+function occupancy(state) {
+  const t = state.tenants || [], zones = state.zones || [];
+  const mapped = new Set(zones.map((z) => z.tenantId).filter(Boolean));
+  const zoneTotal = zones.reduce((s, z) => s + num(z.areaSft), 0);
+  const leasedMapped = zones
+    .filter((z) => { const tn = t.find((x) => x.id === z.tenantId); return tn && SIGNED_STATUS.includes(tn.status); })
+    .reduce((s, z) => s + num(z.areaSft), 0);
+  const unmapped = t.filter((x) => SIGNED_STATUS.includes(x.status) && !mapped.has(x.id) && num(x.area) > 0);
+  const unmappedSft = unmapped.reduce((s, x) => s + num(x.area), 0);
+  const leased = leasedMapped + unmappedSft;
+  const total = zoneTotal + unmappedSft;
+  return { leased, total, pct: zoneTotal > 0 ? Math.round((leased / Math.max(1, total)) * 100) : null, unmapped, unmappedSft };
+}
+
 function tenantMonthlyL(t) {
   const area = num(t.area);
   if (t.deal === "Pure Rent") return (area * num(t.rent)) / 1e5;
@@ -617,6 +644,18 @@ function tenantRoi(t, cfg) {
 const fmtL = (v) => `₹${num(v).toLocaleString("en-IN", { maximumFractionDigits: 1 })}L`;
 const fmtCr = (vL) => `₹${(num(vL) / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })} Cr`;
 const fmtSft = (v) => `${num(v).toLocaleString("en-IN")} sft`;
+/* Links are stored data, and stored data is attacker-controlled: a `javascript:`
+   address would run in the app's own origin the moment a colleague clicked it.
+   Only ordinary web and mail links are ever handed to the browser; anything else
+   is shown as inert text. Applied both on save and at render, so links already
+   sitting in the workspace are neutralised too. */
+const SAFE_SCHEMES = ["http:", "https:", "mailto:"];
+const safeUrl = (raw) => {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  try { return SAFE_SCHEMES.includes(new URL(s, window.location.href).protocol) ? s : ""; }
+  catch (e) { return ""; }
+};
 const uid = () => Math.random().toString(36).slice(2, 9);
 const today = () => new Date().toISOString().slice(0, 10);
 const uName = (state, id) => (state.users.find((u) => u.id === id) || {}).name || "—";
@@ -658,8 +697,8 @@ const Bar_ = ({ pct, tone }) => (
   </div>
 );
 
-const Btn = ({ children, onClick, tone, ghost, small, disabled }) => (
-  <button onClick={onClick} disabled={disabled} style={{
+const Btn = ({ children, onClick, tone, ghost, small, disabled, autoFocus }) => (
+  <button onClick={onClick} disabled={disabled} autoFocus={autoFocus} style={{
     display: "inline-flex", alignItems: "center", gap: 6, cursor: disabled ? "not-allowed" : "pointer",
     background: ghost ? "transparent" : (tone || C.gold), color: ghost ? (tone || C.gold) : "#16163A",
     border: ghost ? `1px solid ${(tone || C.gold)}66` : "none", borderRadius: 8,
@@ -674,7 +713,7 @@ const Field = ({ label, children }) => (
     {children}
   </label>
 );
-const inputSt = { width: "100%", boxSizing: "border-box", background: C.panel3, border: `1px solid ${C.line}`, borderRadius: 7, color: C.text, padding: "9px 10px", fontSize: 13, fontFamily: SANS, outline: "none" };
+const inputSt = { width: "100%", boxSizing: "border-box", background: C.panel3, border: `1px solid ${C.lineInput}`, borderRadius: 7, color: C.text, padding: "9px 10px", fontSize: 13, fontFamily: SANS, outline: "none" };
 const Inp = (p) => <input {...p} style={{ ...inputSt, ...p.style }} />;
 const Sel = ({ options, ...p }) => (
   <select {...p} style={{ ...inputSt, ...p.style }}>
@@ -692,6 +731,59 @@ const TTJMark = ({ size = 40 }) => (
   <img src={`${import.meta.env.BASE_URL}brand/ttj-globe.png`} width={size} height={size} alt="The Town Junction"
     style={{ display: "block", borderRadius: Math.max(6, Math.round(size * 0.22)), flexShrink: 0 }} />
 );
+
+/* ---------- in-app dialogs ----------
+   The browser's own confirm()/notify() block the page, can't show what is about
+   to be lost, and look foreign inside the installed app. These read the same at
+   the call site — `if (await askConfirm(…))` — but render as part of the app,
+   close on Escape, and name the record being destroyed. */
+let _dialogHost = null;
+const askConfirm = (opts) => new Promise((resolve) => {
+  const o = typeof opts === "string" ? { body: opts } : (opts || {});
+  if (!_dialogHost) return resolve(window.confirm(o.body || "Are you sure?"));
+  _dialogHost({ ...o, kind: "confirm", resolve });
+});
+const notify = (opts) => new Promise((resolve) => {
+  const o = typeof opts === "string" ? { body: opts } : (opts || {});
+  if (!_dialogHost) { window.alert(o.body || ""); return resolve(true); }
+  _dialogHost({ ...o, kind: "notice", resolve });
+});
+function DialogHost() {
+  const [d, setD] = useState(null);
+  useEffect(() => { _dialogHost = setD; return () => { _dialogHost = null; }; }, []);
+  useEffect(() => {
+    if (!d) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); d.resolve(false); setD(null); }
+      else if (e.key === "Enter") { e.preventDefault(); d.resolve(true); setD(null); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [d]);
+  if (!d) return null;
+  const done = (v) => { d.resolve(v); setD(null); };
+  const tone = d.danger ? C.red : C.gold;
+  return (
+    <div role="dialog" aria-modal="true" aria-label={d.title || (d.kind === "confirm" ? "Confirm" : "Notice")}
+      onClick={() => done(false)}
+      style={{ position: "fixed", inset: 0, background: "#000B", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: "calc(env(safe-area-inset-top, 0px) + 20px) 16px calc(env(safe-area-inset-bottom, 0px) + 20px)" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel2, border: `1px solid ${tone}55`, borderRadius: 12, width: "100%", maxWidth: 420, padding: 20 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+          {d.danger && <AlertTriangle size={18} color={C.red} style={{ flexShrink: 0, marginTop: 2 }} />}
+          <div style={{ minWidth: 0 }}>
+            {d.title && <div style={{ fontFamily: SERIF, fontSize: 17, color: C.text, marginBottom: 5 }}>{d.title}</div>}
+            <div style={{ fontSize: 13.5, color: d.title ? C.mute : C.text, lineHeight: 1.6 }}>{d.body}</div>
+            {d.note && <div style={{ fontSize: 12, color: C.faint, marginTop: 8, lineHeight: 1.55 }}>{d.note}</div>}
+          </div>
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
+          {d.kind === "confirm" && <Btn ghost onClick={() => done(false)}>{d.cancelLabel || "Cancel"}</Btn>}
+          <Btn autoFocus tone={d.danger ? C.red : undefined} onClick={() => done(true)}>{d.okLabel || (d.kind === "confirm" ? (d.danger ? "Delete" : "Continue") : "OK")}</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const Modal = ({ title, onClose, children, wide }) => (
   <div style={{ position: "fixed", inset: 0, background: "#000A", zIndex: 50, display: "flex", alignItems: "flex-start", justifyContent: "center", overflowY: "auto", padding: "calc(env(safe-area-inset-top, 0px) + 40px) 12px calc(env(safe-area-inset-bottom, 0px) + 40px)" }} onClick={onClose}>
@@ -785,11 +877,7 @@ function Overview({ state, setState, user, goTo, liveStatus }) {
   const t = state.tenants;
   const signed = t.filter((x) => ["Agreement","Fit-out","Operational"].includes(x.status));
   const revSigned = signed.reduce((s, x) => s + tenantMonthlyL(x), 0);
-  const totalArea = state.zones.reduce((s, z) => s + (+z.areaSft || 0), 0);
-  const leasedArea = state.zones.filter((z) => {
-    const tn = t.find((x) => x.id === z.tenantId);
-    return tn && ["Agreement","Fit-out","Operational"].includes(tn.status);
-  }).reduce((s, z) => s + (+z.areaSft || 0), 0);
+  const occ = occupancy(state);
   const capBudget = state.capex.reduce((s, c) => s + (+c.budgetL || 0), 0);
   const capSpent = state.capex.reduce((s, c) => s + (+c.spentL || 0), 0);
   const openComp = state.compliance.filter((c) => c.status !== "Done").length;
@@ -855,7 +943,7 @@ function Overview({ state, setState, user, goTo, liveStatus }) {
       {!ext && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
           <KPI label="Signed revenue / mo" value={fmtL(revSigned)} sub={`of ₹${CMA_TARGET_L}L CMA target`} tone={C.green} />
-          <KPI label="Leased area" value={`${Math.round((leasedArea / Math.max(1, totalArea)) * 100)}%`} sub={`${fmtSft(leasedArea)} of ${fmtSft(totalArea)}`} tone={C.blue} />
+          <KPI label="Leased area" value={occ.pct === null ? "—" : `${occ.pct}%`} sub={occ.pct === null ? "add the layout to measure" : `${fmtSft(occ.leased)} of ${fmtSft(occ.total)}`} tone={C.blue} />
           <KPI label="Capex spent" value={fmtCr(capSpent)} sub={`of ${fmtCr(capBudget)}`} tone={C.amber} />
           <KPI label="Approvals pending" value={pendingApprovals.length} sub="awaiting decision" tone={pendingApprovals.length ? C.purple : C.green} />
           <KPI label="Compliance open" value={openComp} sub="statutory & commercial" tone={openComp ? C.red : C.green} />
@@ -957,7 +1045,9 @@ function Tasks({ state, setState, user }) {
   const move = (k, status) => setState((s) => withLog(
     { ...s, tasks: s.tasks.map((x) => (x.id === k.id ? { ...x, status } : x)) },
     user.name, `moved “${k.title}” to ${status}`));
-  const del = (id) => { if (confirm("Delete this task?")) setState((s) => ({ ...s, tasks: s.tasks.filter((k) => k.id !== id) })); };
+  const del = async (id) => { const r = state.tasks.find((k) => k.id === id);
+    if (await askConfirm({ title: "Delete this task?", body: r ? `“${r.title}” will be removed for everyone.` : "It will be removed for everyone.", note: "This can't be undone.", danger: true }))
+      setState((s) => ({ ...s, tasks: s.tasks.filter((k) => k.id !== id) })); };
   const assignable = isExec(user) ? state.users : state.users.filter((u2) => u2.dept === (edit?.dept || user.dept) || isExec(u2));
 
   return (
@@ -1074,7 +1164,7 @@ function AttachInput({ items, onChange, folder, live }) {
     setProg(null);
   };
   const addLink = () => {
-    if (!/^https?:\/\//.test(lnUrl.trim())) return setErr("Paste a full link starting with https://");
+    if (!safeUrl(lnUrl) || !/^https?:\/\//i.test(lnUrl.trim())) return setErr("Paste a full link starting with https://");
     onChange([...(items || []), { id: uid(), name: lnName.trim() || lnUrl.trim().slice(0, 60), url: lnUrl.trim(), type: "link", size: 0 }]);
     setLnName(""); setLnUrl(""); setErr("");
   };
@@ -1119,12 +1209,12 @@ function AttachList({ items }) {
     <div style={{ marginTop: 9 }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         {imgs.map((a) => (
-          <img key={a.id} src={a.url} alt={a.name} title={a.name} loading="lazy"
+          <img key={a.id} src={safeUrl(a.url)} alt={a.name} title={a.name} loading="lazy"
             style={{ height: 64, borderRadius: 6, border: `1px solid ${C.line}`, cursor: "pointer", objectFit: "cover", maxWidth: 110 }}
             onClick={() => setLightbox(a)} />
         ))}
         {rest.map((a) => (
-          <a key={a.id} href={a.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: C.text, background: C.panel3, border: `1px solid ${C.line}`, borderRadius: 7, padding: "6px 10px", textDecoration: "none", maxWidth: 240 }}>
+          <a key={a.id} href={safeUrl(a.url)} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: C.text, background: C.panel3, border: `1px solid ${C.line}`, borderRadius: 7, padding: "6px 10px", textDecoration: "none", maxWidth: 240 }}>
             {a.type === "link" ? <LinkIcon size={12} color={C.blue} /> : <FileText size={12} color={C.gold} />}
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</span>
             {a.size > 0 && <span style={{ color: C.faint, fontSize: 10.5, flexShrink: 0 }}>{WA.humanSize(a.size)}</span>}
@@ -1133,8 +1223,8 @@ function AttachList({ items }) {
       </div>
       {lightbox && (
         <Modal title={lightbox.name} onClose={() => setLightbox(null)} wide>
-          <img src={lightbox.url} alt={lightbox.name} style={{ maxWidth: "100%", maxHeight: "70vh", display: "block", margin: "0 auto", borderRadius: 8 }} />
-          <div style={{ textAlign: "right", marginTop: 10 }}><a href={lightbox.url} target="_blank" rel="noreferrer" style={{ color: C.gold, fontSize: 12.5 }}>Open full size ↗</a></div>
+          <img src={safeUrl(lightbox.url)} alt={lightbox.name} style={{ maxWidth: "100%", maxHeight: "70vh", display: "block", margin: "0 auto", borderRadius: 8 }} />
+          <div style={{ textAlign: "right", marginTop: 10 }}><a href={safeUrl(lightbox.url)} target="_blank" rel="noreferrer" style={{ color: C.gold, fontSize: 12.5 }}>Open full size ↗</a></div>
         </Modal>
       )}
     </div>
@@ -1241,7 +1331,9 @@ function Announcements({ state, setState, user }) {
       user.name, `posted announcement “${rec.title}”`));
     setEdit(null);
   };
-  const del = (id) => { if (confirm("Delete announcement?")) setState((s) => ({ ...s, announcements: s.announcements.filter((a) => a.id !== id) })); };
+  const del = async (id) => { const r = state.announcements.find((a) => a.id === id);
+    if (await askConfirm({ title: "Delete announcement?", body: r ? `“${r.title}” will disappear for the whole team.` : "It will disappear for the whole team.", danger: true }))
+      setState((s) => ({ ...s, announcements: s.announcements.filter((a) => a.id !== id) })); };
   const list = [...state.announcements].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.date || "").localeCompare(a.date || ""));
   return (
     <div>
@@ -1304,7 +1396,9 @@ function Tenants({ state, setState, canWrite }) {
     setState((s) => ({ ...s, tenants: edit.id ? s.tenants.map((t) => (t.id === edit.id ? rec : t)) : [...s.tenants, rec] }));
     setEdit(null);
   };
-  const del = (id) => { if (confirm("Delete this tenant record?")) setState((s) => ({ ...s, tenants: s.tenants.filter((t) => t.id !== id) })); };
+  const del = async (id) => { const r = state.tenants.find((t) => t.id === id);
+    if (await askConfirm({ title: "Delete this tenant?", body: r ? `“${r.name}” leaves the rent roll, with its deal terms and ROI workings.` : "It leaves the rent roll.", note: "This can't be undone.", danger: true }))
+      setState((s) => ({ ...s, tenants: s.tenants.filter((t) => t.id !== id) })); };
   const totRev = list.reduce((s, t) => s + tenantMonthlyL(t), 0);
 
   return (
@@ -1546,7 +1640,9 @@ function Capex({ state, setState, canWrite }) {
     setState((s) => ({ ...s, capex: edit.id ? s.capex.map((c) => (c.id === edit.id ? rec : c)) : [...s.capex, rec] }));
     setEdit(null);
   };
-  const del = (id) => { if (confirm("Delete this capex line?")) setState((s) => ({ ...s, capex: s.capex.filter((c) => c.id !== id) })); };
+  const del = async (id) => { const r = state.capex.find((c) => c.id === id);
+    if (await askConfirm({ title: "Delete this capex package?", body: r ? `“${r.name}” and its budget-vs-spent figures will be removed.` : "The package will be removed.", danger: true }))
+      setState((s) => ({ ...s, capex: s.capex.filter((c) => c.id !== id) })); };
 
   const byCat = CAPEX_CATS.map((cat) => {
     const items = state.capex.filter((c) => c.category === cat);
@@ -1715,7 +1811,9 @@ function Works({ state, setState, canWrite }) {
     setState((s) => ({ ...s, works: edit.id ? s.works.map((w) => (w.id === edit.id ? rec : w)) : [...(s.works || []), rec] }));
     setEdit(null);
   };
-  const del = (id) => { if (confirm("Delete this work item?")) setState((s) => ({ ...s, works: s.works.filter((w) => w.id !== id) })); };
+  const del = async (id) => { const r = (state.works || []).find((w) => w.id === id);
+    if (await askConfirm({ title: "Delete this work item?", body: r ? `“${r.name}” comes off the programme.` : "It comes off the programme.", danger: true }))
+      setState((s) => ({ ...s, works: s.works.filter((w) => w.id !== id) })); };
   const move = (w, status) => setState((s) => ({ ...s, works: s.works.map((x) => x.id === w.id ? { ...x, status, pct: status === "Done" ? 100 : x.pct } : x) }));
   const capexName = (id) => { const c = (state.capex || []).find((x) => x.id === id); return c ? c.name : ""; };
   const viewBtn = (k, label) => (
@@ -1861,7 +1959,8 @@ function MallLayout({ state, setState, canWrite }) {
     setState((s) => ({ ...s, zones: edit.id ? s.zones.map((z) => (z.id === edit.id ? rec : z)) : [...s.zones, rec] }));
     setEdit(null); setSelZone(null);
   };
-  const del = (id) => { if (confirm("Delete this zone?")) { setState((s) => ({ ...s, zones: s.zones.filter((z) => z.id !== id) })); setSelZone(null); } };
+  const del = async (id) => { const r = state.zones.find((z) => z.id === id);
+    if (await askConfirm({ title: "Delete this zone?", body: r ? `“${r.name}” (${fmtSft(num(r.areaSft))}) comes off the layout, which changes occupancy.` : "It comes off the layout.", danger: true })) { setState((s) => ({ ...s, zones: s.zones.filter((z) => z.id !== id) })); setSelZone(null); } };
 
   const maxFloorArea = Math.max(...FLOORS.map((f) => state.zones.filter((z) => z.floor === f).reduce((s, z) => s + (+z.areaSft || 0), 0)), 1);
 
@@ -2046,7 +2145,7 @@ function AdminOps({ state, setState, canWrite }) {
                     <Td><Badge text={c.status} color={COMP_COLOR[c.status]} /></Td>
                     {canWrite && <Td right>
                       <Pencil size={14} color={C.mute} style={{ cursor: "pointer", marginRight: 12 }} onClick={() => setEditC({ ...c })} />
-                      <Trash2 size={14} color={C.red} style={{ cursor: "pointer" }} onClick={() => { if (confirm("Delete item?")) setState((s) => ({ ...s, compliance: s.compliance.filter((x) => x.id !== c.id) })); }} />
+                      <Trash2 size={14} color={C.red} style={{ cursor: "pointer" }} onClick={async () => { if (await askConfirm({ title: "Delete compliance item?", body: `“${c.name}” will be removed from the register.`, danger: true })) setState((s) => ({ ...s, compliance: s.compliance.filter((x) => x.id !== c.id) })); }} />
                     </Td>}
                   </tr>
                 ))}
@@ -2071,7 +2170,7 @@ function AdminOps({ state, setState, canWrite }) {
                     <Td><Badge text={v.status} color={VEND_COLOR[v.status]} /></Td>
                     {canWrite && <Td right>
                       <Pencil size={14} color={C.mute} style={{ cursor: "pointer", marginRight: 12 }} onClick={() => setEditV({ ...v })} />
-                      <Trash2 size={14} color={C.red} style={{ cursor: "pointer" }} onClick={() => { if (confirm("Delete vendor?")) setState((s) => ({ ...s, vendors: s.vendors.filter((x) => x.id !== v.id) })); }} />
+                      <Trash2 size={14} color={C.red} style={{ cursor: "pointer" }} onClick={async () => { if (await askConfirm({ title: "Delete vendor?", body: `“${v.name}” will be removed from the register.`, danger: true })) setState((s) => ({ ...s, vendors: s.vendors.filter((x) => x.id !== v.id) })); }} />
                     </Td>}
                   </tr>
                 ))}
@@ -2153,7 +2252,7 @@ function Drawings({ state, setState, canWrite }) {
                     <Td><Badge text={d.status} color={DWG_COLOR[d.status]} /></Td>
                     {canWrite && <Td right>
                       <Pencil size={13} color={C.mute} style={{ cursor: "pointer", marginRight: 10 }} onClick={() => setEditD({ ...d })} />
-                      <Trash2 size={13} color={C.red} style={{ cursor: "pointer" }} onClick={() => { if (confirm("Delete drawing?")) setState((s) => ({ ...s, drawings: s.drawings.filter((x) => x.id !== d.id) })); }} />
+                      <Trash2 size={13} color={C.red} style={{ cursor: "pointer" }} onClick={async () => { if (await askConfirm({ title: "Delete drawing?", body: `“${d.title}” will be removed from the register.`, danger: true })) setState((s) => ({ ...s, drawings: s.drawings.filter((x) => x.id !== d.id) })); }} />
                     </Td>}
                   </tr>
                 ))}
@@ -2174,7 +2273,7 @@ function Drawings({ state, setState, canWrite }) {
                     <Td><Badge text={r.status} color={RFI_COLOR[r.status]} /></Td>
                     {canWrite && <Td right>
                       <Pencil size={13} color={C.mute} style={{ cursor: "pointer", marginRight: 10 }} onClick={() => setEditR({ ...r })} />
-                      <Trash2 size={13} color={C.red} style={{ cursor: "pointer" }} onClick={() => { if (confirm("Delete RFI?")) setState((s) => ({ ...s, rfis: s.rfis.filter((x) => x.id !== r.id) })); }} />
+                      <Trash2 size={13} color={C.red} style={{ cursor: "pointer" }} onClick={async () => { if (await askConfirm({ title: "Delete RFI?", body: `“${r.title}” will be removed, including its answer.`, danger: true })) setState((s) => ({ ...s, rfis: s.rfis.filter((x) => x.id !== r.id) })); }} />
                     </Td>}
                   </tr>
                 ))}
@@ -2246,8 +2345,9 @@ function MarketingStudio({ state, setState, user }) {
     setEditC(null);
   };
   const saveK = () => {
+    if (editK.link && !safeUrl(editK.link)) return notify("That deliverable link isn't a web address. Paste one starting with https:// (or leave it blank).");
     const isNew = !editK.id;
-    const rec = { ...editK, id: editK.id || uid() };
+    const rec = { ...editK, link: safeUrl(editK.link), id: editK.id || uid() };
     setState((s) => withLog(
       { ...s, content: isNew ? [...s.content, rec] : s.content.map((c) => (c.id === rec.id ? rec : c)) },
       user.name, `${isNew ? "briefed" : "updated"} content “${rec.title}” → ${uName(state, rec.assigneeId)}`));
@@ -2311,7 +2411,7 @@ function MarketingStudio({ state, setState, user }) {
                   </div>
                   {canManageCampaigns && <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                     <Pencil size={14} color={C.mute} style={{ cursor: "pointer" }} onClick={() => setEditC({ ...c })} />
-                    <Trash2 size={14} color={C.red} style={{ cursor: "pointer" }} onClick={() => { if (confirm("Delete campaign?")) setState((s) => ({ ...s, campaigns: s.campaigns.filter((x) => x.id !== c.id) })); }} />
+                    <Trash2 size={14} color={C.red} style={{ cursor: "pointer" }} onClick={async () => { if (await askConfirm({ title: "Delete campaign?", body: `“${c.name}” and its budget figures will be removed.`, danger: true })) setState((s) => ({ ...s, campaigns: s.campaigns.filter((x) => x.id !== c.id) })); }} />
                   </div>}
                 </div>
               </Card>
@@ -2342,7 +2442,7 @@ function MarketingStudio({ state, setState, user }) {
                       <div style={{ fontSize: 11, color: C.faint, marginTop: 6 }}>{c.type} · {uName(state, c.assigneeId)}{c.due && <span style={isOverdue(c.due, ["Approved","Published"].includes(c.status)) ? { color: C.red, fontWeight: 700 } : undefined}> · due {c.due}{isOverdue(c.due, ["Approved","Published"].includes(c.status)) ? " · OVERDUE" : ""}</span>}</div>
                       {c.campaign && <div style={{ fontSize: 10.5, color: C.rose, marginTop: 3 }}>{c.campaign}</div>}
                       {c.brief && <div style={{ fontSize: 11.5, color: C.mute, marginTop: 6, lineHeight: 1.5 }}>{c.brief}</div>}
-                      {c.link && <a href={c.link} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.blue, marginTop: 6, display: "inline-flex", alignItems: "center", gap: 4 }}><LinkIcon size={11} /> Deliverable</a>}
+                      {safeUrl(c.link) && <a href={safeUrl(c.link)} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.blue, marginTop: 6, display: "inline-flex", alignItems: "center", gap: 4 }}><LinkIcon size={11} /> Deliverable</a>}
                       {nextStates(c).length > 0 && (
                         <div style={{ display: "flex", gap: 6, marginTop: 9, flexWrap: "wrap" }}>
                           {nextStates(c).map((x) => (
@@ -2443,9 +2543,8 @@ function Analytics({ state }) {
   const t = state.tenants || [], zones = state.zones || [], capex = state.capex || [], works = state.works || [];
   const SIGNED = ["Agreement", "Fit-out", "Operational"];
   const signed = t.filter((x) => SIGNED.includes(x.status));
-  const totalSft = zones.reduce((s, z) => s + (+z.areaSft || 0), 0);
-  const leasedSft = zones.filter((z) => { const tn = t.find((x) => x.id === z.tenantId); return tn && SIGNED.includes(tn.status); }).reduce((s, z) => s + (+z.areaSft || 0), 0);
-  const occPct = totalSft ? Math.round((leasedSft / totalSft) * 100) : 0;
+  const occ = occupancy(state);
+  const totalSft = occ.total, leasedSft = occ.leased, occPct = occ.pct;
   const rentNow = signed.reduce((s, x) => s + tenantMonthlyL(x), 0);
   /* full occupancy: signed rent + vacant sft priced at the blended achieved
      rate; before any deal is signed, the CMA target anchors the number */
@@ -2495,12 +2594,24 @@ function Analytics({ state }) {
       <SectionTitle eyebrow="Property · Board view" title="Analytics & Projections"
         sub="The numbers behind the mall — occupancy, rent roll, pipeline, capex burn and deal returns. Every projection states its assumption; nothing here is editable." />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
-        <KPI label="Occupancy" value={`${occPct}%`} sub={`${fmtSft(leasedSft)} of ${fmtSft(totalSft)} leased`} tone={occPct >= 70 ? C.green : occPct >= 40 ? C.amber : C.red} />
+        <KPI label="Occupancy" value={occPct === null ? "—" : `${occPct}%`}
+          sub={occPct === null ? "no layout entered yet" : `${fmtSft(leasedSft)} of ${fmtSft(totalSft)} leased`}
+          tone={occPct === null ? C.faint : occPct >= 70 ? C.green : occPct >= 40 ? C.amber : C.red} />
         <KPI label="Rent roll — signed" value={`${fmtL(rentNow)}/mo`} sub={`${signed.length} signed of ${t.length} in pipeline`} tone={C.green} />
         <KPI label="At full occupancy" value={`${fmtL(rentFull)}/mo`} sub={achievedPsf > 0 ? `vacant sft at achieved ₹${Math.round(achievedPsf)}/sft` : `CMA anchor — no signed deals yet`} tone={C.gold} />
         <KPI label="Capex burn" value={fmtCr(capexSpent)} sub={`of ${fmtCr(capexBudget)} budget (${Math.round((capexSpent / Math.max(1, capexBudget)) * 100)}%)`} tone={C.amber} />
         <KPI label="Works progress" value={worksPct === null ? "—" : `${worksPct}%`} sub={worksPct === null ? "no work items yet" : `${works.length} items on the programme`} tone={C.purple} />
       </div>
+
+      {occ.unmapped.length > 0 && (
+        <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "11px 14px", background: `${C.amber}12`, border: `1px solid ${C.amber}44`, borderRadius: 10, marginBottom: 14, fontSize: 12.5, color: C.text, lineHeight: 1.6 }}>
+          <AlertTriangle size={15} color={C.amber} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>
+            <b>{fmtSft(occ.unmappedSft)} of signed area isn't on the mall layout yet</b> — {occ.unmapped.map((x) => x.name).join(", ")}.
+            It's counted in occupancy above, but map these to zones in Mall Layout so the floor plans and the numbers agree.
+          </span>
+        </div>
+      )}
 
       <Card title="Revenue ramp — next 24 months (₹L/mo)" style={{ marginBottom: 14 }}>
         <div style={{ height: 260 }}>
@@ -2627,9 +2738,10 @@ function buildAiSnapshot(state, user) {
   if (deptOk(["leasing"])) {
     push("TENANTS / RENT ROLL (₹L = lakh per month):");
     cap(state.tenants, 25).forEach((x) => push(` ${x.name} | ${x.category} | ${x.floor} | ${num(x.area).toLocaleString("en-IN")}sft | ${x.status} | ${x.deal} | ₹${tenantMonthlyL(x).toFixed(1)}L/mo${num(x.capexPsf) ? ` | capex ₹${num(x.capexPsf)}/sft` : ""}`));
-    const totalSft = (state.zones || []).reduce((s, z) => s + (+z.areaSft || 0), 0);
-    const leased = (state.zones || []).filter((z) => { const tn = (state.tenants || []).find((x) => x.id === z.tenantId); return tn && ["Agreement", "Fit-out", "Operational"].includes(tn.status); }).reduce((s, z) => s + (+z.areaSft || 0), 0);
-    if (totalSft) push(`OCCUPANCY: ${leased.toLocaleString("en-IN")} of ${totalSft.toLocaleString("en-IN")} sft leased (${Math.round((leased / totalSft) * 100)}%)`);
+    const occ = occupancy(state);
+    if (occ.pct !== null) push(`OCCUPANCY: ${occ.leased.toLocaleString("en-IN")} of ${occ.total.toLocaleString("en-IN")} sft leased (${occ.pct}%)`);
+    else push("OCCUPANCY: unknown — no mall layout entered yet");
+    if (occ.unmapped.length) push(` note: ${occ.unmappedSft.toLocaleString("en-IN")} sft of signed area not yet mapped to zones (${occ.unmapped.map((x) => x.name).join(", ")})`);
   }
   if (deptOk(["project", "design"])) {
     if ((state.capex || []).length) { push("CAPEX PACKAGES (₹L):"); cap(state.capex, 20).forEach((c) => push(` ${c.name} | ${c.category} | budget ${num(c.budgetL)}L | spent ${num(c.spentL)}L | ${c.status} | due:${c.due || "—"}`)); }
@@ -2773,13 +2885,16 @@ function Documents({ state, setState, user }) {
     (ext ? d.dept === user.dept : true)
   );
   const save = () => {
-    const rec = { ...edit, id: edit.id || uid(), addedById: edit.addedById || user.id, date: edit.date || today() };
+    if (edit.url && !safeUrl(edit.url)) return notify("That link isn't a web address. Paste one starting with https:// (or leave it blank).");
+    const rec = { ...edit, url: safeUrl(edit.url), id: edit.id || uid(), addedById: edit.addedById || user.id, date: edit.date || today() };
     setState((s) => withLog(
       { ...s, docs: edit.id ? s.docs.map((d) => (d.id === edit.id ? rec : d)) : [rec, ...s.docs] },
       user.name, `filed document “${rec.name}”`));
     setEdit(null);
   };
-  const del = (id) => { if (confirm("Remove this document entry?")) setState((s) => ({ ...s, docs: s.docs.filter((d) => d.id !== id) })); };
+  const del = async (id) => { const r = state.docs.find((d) => d.id === id);
+    if (await askConfirm({ title: "Remove this document entry?", body: r ? `“${r.name}” is unfiled here. The file itself isn't deleted.` : "The entry is unfiled here.", danger: true }))
+      setState((s) => ({ ...s, docs: s.docs.filter((d) => d.id !== id) })); };
   const canAdd = true; /* everyone files into their own dept; externals their deliverables */
   return (
     <div>
@@ -2801,7 +2916,7 @@ function Documents({ state, setState, user }) {
                   <Td><Badge text={DEPTS[d.dept]?.short || d.dept} color={DEPTS[d.dept]?.accent || C.faint} /></Td>
                   <Td style={{ color: C.mute, fontSize: 12 }}>{uName(state, d.addedById)}</Td>
                   <Td style={{ color: C.mute, fontSize: 12 }}>{d.date}</Td>
-                  <Td>{d.url ? <a href={d.url} target="_blank" rel="noreferrer" style={{ color: C.blue, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}><LinkIcon size={11} /> Open</a> : <span style={{ color: C.faint, fontSize: 12 }}>No link</span>}</Td>
+                  <Td>{safeUrl(d.url) ? <a href={safeUrl(d.url)} target="_blank" rel="noreferrer" style={{ color: C.blue, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}><LinkIcon size={11} /> Open</a> : <span style={{ color: C.faint, fontSize: 12 }}>No link</span>}</Td>
                   <Td right>
                     {(isOwner(user) || d.addedById === user.id) && <>
                       <Pencil size={14} color={C.mute} style={{ cursor: "pointer", marginRight: 12 }} onClick={() => setEdit({ ...d })} />
@@ -3044,7 +3159,9 @@ function MeetingStudio({ state, setState, user }) {
       user.name, `minuted “${rec.title}”`));
     setEditMom(null);
   };
-  const delMeeting = (id) => { if (confirm("Delete this meeting record?")) setState((s) => ({ ...s, meetings: s.meetings.filter((m) => m.id !== id) })); };
+  const delMeeting = async (id) => { const r = state.meetings.find((m) => m.id === id);
+    if (await askConfirm({ title: "Delete this meeting record?", body: r ? `“${r.title}” goes, along with its transcript and AI notes.` : "The record, transcript and notes will go.", note: "Action items already pushed to people's tasks stay.", danger: true }))
+      setState((s) => ({ ...s, meetings: s.meetings.filter((m) => m.id !== id) })); };
 
   const list = [...state.meetings].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   const toggleP = (id) => setMeta((m) => ({ ...m, participantIds: m.participantIds.includes(id) ? m.participantIds.filter((x) => x !== id) : [...m.participantIds, id] }));
@@ -3416,11 +3533,11 @@ function SecurityPage({ state, setState, user, liveStatus }) {
     });
   }
 
-  const killSession = (s) => { if (confirm(`Sign ${uName2(s.u)} out of this device?`)) setState((st) => withLog({ ...st, kills: { ...(st.kills || {}), [`${s.u}|${s.d}`]: Date.now() } }, user.name, `force-signed-out ${uName2(s.u)} (device ${s.d})`)); };
-  const killAll = (uid) => { if (confirm(`Sign ${uName2(uid)} out everywhere?`)) setState((st) => withLog({ ...st, kills: { ...(st.kills || {}), [`${uid}|*`]: Date.now() } }, user.name, `force-signed-out ${uName2(uid)} on all devices`)); };
-  const toggleLock = (u) => {
-    if (u.id === user.id) return alert("You cannot lock your own account.");
-    if (confirm(u.locked ? `Unlock ${u.name}'s account?` : `Lock ${u.name}'s account? They will be signed out and cannot sign in until unlocked.`))
+  const killSession = async (s) => { if (await askConfirm(`Sign ${uName2(s.u)} out of this device?`)) setState((st) => withLog({ ...st, kills: { ...(st.kills || {}), [`${s.u}|${s.d}`]: Date.now() } }, user.name, `force-signed-out ${uName2(s.u)} (device ${s.d})`)); };
+  const killAll = async (uid) => { if (await askConfirm(`Sign ${uName2(uid)} out everywhere?`)) setState((st) => withLog({ ...st, kills: { ...(st.kills || {}), [`${uid}|*`]: Date.now() } }, user.name, `force-signed-out ${uName2(uid)} on all devices`)); };
+  const toggleLock = async (u) => {
+    if (u.id === user.id) return notify("You cannot lock your own account.");
+    if (await askConfirm({ title: u.locked ? `Unlock ${u.name}?` : `Lock ${u.name} out?`, body: u.locked ? "They can open the app again straight away." : "They are signed out of the app and can't reopen it until you unlock them.", note: u.locked ? "" : "This is an in-app block, not a server-side one — it holds for anyone using the app normally.", danger: !u.locked }))
       setState((st) => withLog({ ...st, users: st.users.map((x) => x.id === u.id ? { ...x, locked: !u.locked } : x), kills: u.locked ? st.kills : { ...(st.kills || {}), [`${u.id}|*`]: Date.now() } }, user.name, `${u.locked ? "unlocked" : "locked"} ${u.name}'s account`));
   };
 
@@ -3797,7 +3914,7 @@ function ImportStudio({ state, setState, user, liveStatus }) {
             <Btn onClick={applyMerge}><FileCheck2 size={14} /> Merge {grpCount("people") + grpCount("tasks") + grpCount("approvals") + grpCount("docs")} items</Btn>
             <Btn ghost onClick={reset}>Discard</Btn>
           </div>
-          {[["docs", "Documents & media", (d) => <><b style={{ color: C.text }}>{d.name}</b> <Badge text={d.category} color={C.blue} />{d.url ? <a href={d.url} target="_blank" rel="noreferrer" style={{ color: C.blue, fontSize: 11, marginLeft: 6 }}>file</a> : null}<div style={{ fontSize: 11.5, color: C.faint }}>{d.summary}{d.source ? " · " + d.source : ""}</div></>],
+          {[["docs", "Documents & media", (d) => <><b style={{ color: C.text }}>{d.name}</b> <Badge text={d.category} color={C.blue} />{safeUrl(d.url) ? <a href={safeUrl(d.url)} target="_blank" rel="noreferrer" style={{ color: C.blue, fontSize: 11, marginLeft: 6 }}>file</a> : null}<div style={{ fontSize: 11.5, color: C.faint }}>{d.summary}{d.source ? " · " + d.source : ""}</div></>],
             ["tasks", "Tasks", (t) => <><b style={{ color: C.text }}>{t.title}</b> <Badge text={t.dept} color={C.purple} />{t.assigneeName ? <span style={{ fontSize: 11.5, color: C.faint }}> → {t.assigneeName}</span> : null}{t.due ? <span style={{ fontSize: 11.5, color: C.faint }}> · due {t.due}</span> : null}</>],
             ["approvals", "Approvals", (a) => <><b style={{ color: C.text }}>{a.title}</b>{a.amountL ? <Badge text={fmtL(a.amountL)} color={C.gold} /> : null}<div style={{ fontSize: 11.5, color: C.faint }}>{a.notes}</div></>],
             ["people", "People", (p) => <><b style={{ color: C.text }}>{p.name}</b> <Badge text={p.tier} color={C.teal} /><div style={{ fontSize: 11.5, color: C.faint }}>{p.subRole}</div></>],
@@ -3852,8 +3969,8 @@ function Team({ state, setState, user, liveStatus, authInfo }) {
       await writeAllowlist(emails);
       setWl(emails); setWlText(emails.join("\n"));
       setState((s) => withLog(s, user.name, `updated workspace access list (${emails.length} account${emails.length === 1 ? "" : "s"})`));
-      alert(`Saved — ${emails.length} account${emails.length === 1 ? "" : "s"} can reach the workspace.`);
-    } catch (e) { alert("Couldn't save the access list: " + (e.message || e)); }
+      notify(`Saved — ${emails.length} account${emails.length === 1 ? "" : "s"} can reach the workspace.`);
+    } catch (e) { notify("Couldn't save the access list: " + (e.message || e)); }
     setWlBusy(false);
   };
   const STORAGE_RULES_TEXT = `rules_version = '2';
@@ -3896,17 +4013,19 @@ service cloud.firestore {
   const save = async () => {
     const un = (edit.username || "").trim().toLowerCase();
     const em = (edit.email || "").trim().toLowerCase();
-    if (state.users.some((u) => u.id !== edit.id && (u.username || "").toLowerCase() === un)) return alert("That short name is already in use.");
-    if (em && state.users.some((u) => u.id !== edit.id && (u.email || "").toLowerCase() === em)) return alert("That email is already on another member's profile — one address, one member.");
+    if (state.users.some((u) => u.id !== edit.id && (u.username || "").toLowerCase() === un)) return notify("That short name is already in use.");
+    if (em && state.users.some((u) => u.id !== edit.id && (u.email || "").toLowerCase() === em)) return notify("That email is already on another member's profile — one address, one member.");
     const rec = { ...edit, username: un, email: em, id: edit.id || uid() };
     setState((s) => withLog(
       { ...s, users: edit.id ? s.users.map((u) => (u.id === edit.id ? rec : u)) : [...s.users, rec] },
       user.name, `${edit.id ? "updated" : "added"} team member ${rec.name}`));
     setEdit(null);
   };
-  const del = (id) => {
-    if (id === user.id) return alert("You cannot delete your own login.");
-    if (confirm("Remove this member's access?")) setState((s) => ({ ...s, users: s.users.filter((u) => u.id !== id) }));
+  const del = async (id) => {
+    if (id === user.id) return notify("You cannot delete your own login.");
+    const m = state.users.find((u) => u.id === id);
+    if (await askConfirm({ title: "Remove this member?", body: m ? `${m.name} comes off the team list, so their sign-in no longer matches anyone.` : "They come off the team list.", note: "Their Firebase account still exists — delete it in the console too if they've left.", danger: true }))
+      setState((s) => ({ ...s, users: s.users.filter((u) => u.id !== id) }));
   };
   const exportJson = () => {
     /* never write a readable passcode to a plain file; salted hashes stay so
@@ -3923,12 +4042,12 @@ service cloud.firestore {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
     const rd = new FileReader();
-    rd.onload = () => {
+    rd.onload = async () => {
       try {
         const data = JSON.parse(rd.result);
         if (!data.users || !data.tenants) throw new Error("bad shape");
-        if (confirm("Replace ALL data in this app with the imported file?")) setState({ ...freshState(), ...data });
-      } catch (err) { alert("Invalid backup file."); }
+        if (await askConfirm({ title: "Replace everything?", body: "Every register in the shared workspace is overwritten by this file, for the whole team.", note: "Use “Merge” instead if you only want to add records. Export a backup first.", okLabel: "Replace all data", danger: true })) setState({ ...freshState(), ...data });
+      } catch (err) { notify("Invalid backup file."); }
     };
     rd.readAsText(f);
     e.target.value = "";
@@ -3963,8 +4082,8 @@ service cloud.firestore {
           });
           return withLog(next, user.name, `merged history file — added ${added} new record${added === 1 ? "" : "s"} (${f.name})`);
         });
-        setTimeout(() => alert(`Merge complete — added ${added} new records. Existing data, the AI key and live sync were left untouched.`), 60);
-      } catch (err) { alert("That file couldn't be merged — make sure it's a TTJ history/backup JSON."); }
+        setTimeout(() => notify(`Merge complete — added ${added} new records. Existing data, the AI key and live sync were left untouched.`), 60);
+      } catch (err) { notify("That file couldn't be merged — make sure it's a TTJ history/backup JSON."); }
     };
     rd.readAsText(f);
     e.target.value = "";
@@ -4055,10 +4174,10 @@ service cloud.firestore {
                     const cfg = Function('"use strict"; return (' + m[0] + ")")();
                     if (!cfg || !cfg.apiKey || !cfg.projectId) throw new Error("missing keys");
                     saveFbConfig(cfg);
-                    alert("Saved. The app will reload and connect to the shared workspace.");
+                    notify("Saved. The app will reload and connect to the shared workspace.");
                     location.reload();
                   } catch (err) {
-                    alert("That doesn't look like a valid Firebase config. Paste the whole firebaseConfig block, including the { } braces.");
+                    notify("That doesn't look like a valid Firebase config. Paste the whole firebaseConfig block, including the { } braces.");
                   }
                 }}><LinkIcon size={14} /> Connect shared workspace</Btn>
                 {DEFAULT_FB_CONFIG && <>{" "}<Btn small ghost onClick={() => { saveFbConfig(null); location.reload(); }}>Reconnect built-in workspace</Btn></>}
@@ -4070,7 +4189,7 @@ service cloud.firestore {
                 Project: <span style={{ color: C.text }}>{(effectiveFbConfig() || {}).projectId}</span>
                 {!loadFbConfig() && DEFAULT_FB_CONFIG && <Badge text="built into the app — all devices auto-connect" color={C.green} />}
               </div>
-              <Btn small ghost tone={C.red} onClick={() => { if (confirm("Disconnect this device from the shared workspace? Data stays in the cloud; this device goes standalone.")) { saveFbConfig(loadFbConfig() ? null : { disabled: true }); location.reload(); } }}>Disconnect this device</Btn>
+              <Btn small ghost tone={C.red} onClick={async () => { if (await askConfirm({ title: "Disconnect this device?", body: "This device stops syncing and works on its own copy. The team's data in the cloud is untouched.", danger: true })) { saveFbConfig(loadFbConfig() ? null : { disabled: true }); location.reload(); } }}>Disconnect this device</Btn>
             </div>
           )}
           <div style={{ fontSize: 11.5, color: C.faint, marginTop: 12, lineHeight: 1.6 }}>
@@ -4106,7 +4225,7 @@ service cloud.firestore {
           </div>
           <div style={{ marginTop: 10, position: "relative" }}>
             <pre style={{ background: C.panel3, border: `1px solid ${C.line}`, borderRadius: 8, padding: 12, fontSize: 11, color: C.text, overflowX: "auto", lineHeight: 1.5 }}>{RULES_TEXT}</pre>
-            <Btn small ghost onClick={() => { try { navigator.clipboard.writeText(RULES_TEXT); alert("Rules copied — paste into Firestore → Rules and Publish."); } catch (e) { alert("Copy failed — select the text manually."); } }}>Copy rules</Btn>
+            <Btn small ghost onClick={() => { try { navigator.clipboard.writeText(RULES_TEXT); notify("Rules copied — paste into Firestore → Rules and Publish."); } catch (e) { notify("Copy failed — select the text manually."); } }}>Copy rules</Btn>
           </div>
           <div style={{ fontSize: 11.5, color: C.faint, marginTop: 10, lineHeight: 1.6 }}>
             The admin line in the rules is pinned to your own address — only you can change the access list, even among owners. Devices without an authorised, confirmed sign-in keep working offline but never see team data.
@@ -4116,7 +4235,7 @@ service cloud.firestore {
             <div style={{ fontSize: 11.5, color: C.mute, marginTop: 4, lineHeight: 1.6 }}>Publish once in Firebase console → <b>Storage → Rules</b> so only signed-in team accounts can upload or read files (15MB cap per file):</div>
             <div style={{ marginTop: 8 }}>
               <pre style={{ background: C.panel3, border: `1px solid ${C.line}`, borderRadius: 8, padding: 12, fontSize: 11, color: C.text, overflowX: "auto", lineHeight: 1.5 }}>{STORAGE_RULES_TEXT}</pre>
-              <Btn small ghost onClick={() => { try { navigator.clipboard.writeText(STORAGE_RULES_TEXT); alert("Storage rules copied — paste into Storage → Rules and Publish."); } catch (e) { alert("Copy failed — select the text manually."); } }}>Copy storage rules</Btn>
+              <Btn small ghost onClick={() => { try { navigator.clipboard.writeText(STORAGE_RULES_TEXT); notify("Storage rules copied — paste into Storage → Rules and Publish."); } catch (e) { notify("Copy failed — select the text manually."); } }}>Copy storage rules</Btn>
             </div>
             <div style={{ fontSize: 11, color: C.faint, marginTop: 8, lineHeight: 1.5 }}>Note: a file's download link contains its own access token — anyone the link is forwarded to can open that one file. Fine for quotes and site photos; don't attach anything you wouldn't email.</div>
           </div>
@@ -4425,7 +4544,7 @@ export default function App() {
   if (!state) {
     return <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", color: C.mute, fontFamily: SANS, fontSize: 14 }}>Loading TTJ Team OS…</div>;
   }
-  if (!user) return <Login liveOn={liveStatus === "on"} liveStatus={liveStatus} authNoSeat={authNoSeat} />;
+  if (!user) return <><DialogHost /><Login liveOn={liveStatus === "on"} liveStatus={liveStatus} authNoSeat={authNoSeat} /></>;
   const D = DEPTS[user.dept];
   const myPages = PAGES.filter((p) => pageAllowed(p, user));
   const groups = ["Daily","Workspaces","Property","Records"];
@@ -4477,7 +4596,13 @@ export default function App() {
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: SANS, display: "flex" }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}} .spin{animation:spin 1s linear infinite}`}</style>
+      <style>{`
+        @keyframes spin{to{transform:rotate(360deg)}} .spin{animation:spin 1s linear infinite}
+        /* keyboard users need to see where they are */
+        :focus-visible{outline:2px solid ${C.gold};outline-offset:2px;border-radius:4px}
+        @media (prefers-reduced-motion: reduce){.spin{animation-duration:3s}*{transition-duration:.01ms !important}}
+      `}</style>
+      <DialogHost />
       {isMobile && (
         /* installed-app phones draw content under the status bar — keep the
            burger below the clock/notch via the safe-area inset */
