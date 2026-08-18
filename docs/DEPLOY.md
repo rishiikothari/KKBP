@@ -21,7 +21,22 @@ terminal icon, top-right of the Cloud console), then once:
 
 ```bash
 git clone https://github.com/rishiikothari/KKBP.git ttj && cd ttj
+npm install                     # without this, `vite: command not found`
 ```
+
+Cloud Shell starts with **no project selected**, which makes every `gcloud`
+command fail with *"The required property [project] is not currently set"*. Fix
+it once — it sticks:
+
+```bash
+gcloud projects list                       # find the project ID
+gcloud config set project PROJECT_ID
+```
+
+If `kkbpdashv2` does **not** appear in that list, the Google account Cloud Shell
+is signed in as (shown bottom-right) is not the one that owns the project. Either
+open Cloud Shell as that account, or add this account as **Owner** under
+IAM & Admin → IAM. Deploys will fail with permission errors otherwise.
 
 Your Cloud Shell home directory persists between sessions, so that clone stays
 put. Global npm installs do **not** persist, so point npm at your home directory
@@ -42,14 +57,27 @@ From a laptop with the CLIs installed, everything below works the same way.
 
 ## 1. Hosting the app on Firebase (replaces GitHub Pages)
 
-One-time (skip the install if you did it in §0):
+One-time. Cloud Shell has no browser to bounce through, and stale credentials
+make the copy-a-code flow fail with *"Your credentials are no longer valid"*, so
+clear them first:
 
 ```bash
-firebase login --no-localhost
+firebase logout
+firebase login --no-localhost --reauth
 ```
 
-`--no-localhost` matters in Cloud Shell and on tablets: it prints a URL to open
-and a code to paste back, instead of trying to open a browser on the machine.
+Open the printed URL in a new tab, approve, and paste the code back **at the
+`Enter authorization code:` prompt** — not at the shell prompt (pasting it there
+just gets you `command not found`).
+
+If that still refuses, use a token instead — this always works headless:
+
+```bash
+firebase login:ci --no-localhost          # prints a long token
+export FIREBASE_TOKEN="paste-the-token"   # add to ~/.bashrc to keep it
+```
+
+Treat that token like a password: it grants deploy rights to the project.
 
 Then, from the repo root, any time you want to publish:
 
