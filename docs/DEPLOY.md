@@ -79,28 +79,29 @@ git bundles for backup. Nothing else, ever.
 
 You connect as yourself over SSH, not as this account.
 
-### Create the bare repo (on the VM)
+### Create the repo and wire it up — one command
+
+From your own machine, with `gcloud` installed and logged in:
 
 ```bash
-gcloud compute ssh ttj-git --zone=asia-south1-a       # adjust name/zone
-
-sudo apt-get update && sudo apt-get install -y git
-sudo mkdir -p /srv/git && sudo chown "$USER":"$USER" /srv/git
-git init --bare /srv/git/ttj-team-os.git
-git -C /srv/git/ttj-team-os.git symbolic-ref HEAD refs/heads/main
-exit
+./scripts/setup-git-remote.sh
 ```
 
-### Point this repo at it (on your laptop)
+It finds the VM and the zone it landed in, installs git there if needed, creates
+the bare repo at `/srv/git/ttj-team-os.git`, writes the SSH host entries
+(`gcloud compute config-ssh`), adds a `google` remote, pushes every branch and
+tag, then compares local and remote HEAD and refuses to claim success if they
+differ. Safe to run more than once. If it can't guess the VM, pass the name:
+`./scripts/setup-git-remote.sh ttj-git-vm`.
+
+Everyday pushes after that:
 
 ```bash
-gcloud compute config-ssh          # writes SSH host entries for your VMs
-git remote add google ssh://ttj-git.asia-south1-a.kkbpdashv2/srv/git/ttj-team-os.git
-git push google --all && git push google --tags
-npm run push:google                # everyday push from then on
+npm run push:google
 ```
 
-Verify it's a real copy — clone it somewhere scratch and check the log matches.
+If you ever stop and start the VM its external IP changes — re-run
+`gcloud compute config-ssh` and the remote keeps working.
 
 ### Then retire GitHub
 
