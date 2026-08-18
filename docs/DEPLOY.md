@@ -33,7 +33,7 @@ terminal icon, top-right of the Cloud console), then once:
 
 ```bash
 git clone https://github.com/rishiikothari/KKBP.git ttj && cd ttj
-npm install                     # without this, `vite: command not found`
+npm install     # installs vite AND the firebase CLI locally — no global installs needed
 ```
 
 Cloud Shell starts with **no project selected**, which makes every `gcloud`
@@ -51,17 +51,21 @@ open Cloud Shell as that account, or add this account as **Owner** under
 IAM & Admin → IAM. Deploys will fail with permission errors otherwise.
 
 Your Cloud Shell home directory persists between sessions, so that clone stays
-put. Global npm installs do **not** persist, so point npm at your home directory
-first — then `firebase` survives restarts:
-
-```bash
-npm config set prefix ~/.npm-global
-echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc && source ~/.bashrc
-npm install -g firebase-tools
-```
+put. **Do not run `npm config set prefix`** — it breaks nvm, which is how Cloud
+Shell provides node, and leaves you with `node: No such file or directory` in
+every later session. There's nothing to install globally: `firebase-tools` ships
+in the repo as a dev dependency, so `npm install` (below) is all you need.
 
 Do the Google migration **before** making the GitHub repo private, or that clone
 step needs credentials.
+
+If a **previous attempt already set the prefix** and node keeps disappearing,
+undo it once:
+
+```bash
+npm config delete prefix
+nvm use --lts
+```
 
 From a laptop with the CLIs installed, everything below works the same way.
 
@@ -69,7 +73,10 @@ From a laptop with the CLIs installed, everything below works the same way.
 
 ## 1. Hosting the app on Firebase (replaces GitHub Pages)
 
-One-time. Cloud Shell has no browser to bounce through, and stale credentials
+`firebase` here means `npx firebase` or the copy under `node_modules/.bin` — the
+`npm run` scripts already use the local one, so nothing global is required.
+
+Cloud Shell has no browser to bounce through, and stale credentials
 make the copy-a-code flow fail with *"Your credentials are no longer valid"*, so
 clear them first:
 
