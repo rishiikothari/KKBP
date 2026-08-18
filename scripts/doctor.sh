@@ -28,10 +28,18 @@ if command -v gcloud >/dev/null 2>&1; then
   if [ -n "$PROJ" ]; then
     ok "project set: $PROJ"
   else
-    bad "no project selected — this breaks every gcloud command"
-    fix "gcloud projects list   then   gcloud config set project PROJECT_ID"
+    warn "no project selected — only the VM/git steps need this; hosting reads .firebaserc"
     echo "     projects this account can see:"
     gcloud projects list --format="value(projectId,name)" 2>/dev/null | sed 's/^/       /' || echo "       (none — wrong account?)"
+    echo "     looking for your VM across them:"
+    FOUND=""
+    for P in $(gcloud projects list --format="value(projectId)" 2>/dev/null); do
+      V=$(gcloud compute instances list --project="$P" --format="value(name,zone,status)" 2>/dev/null || true)
+      [ -n "$V" ] && { printf '%s\n' "$V" | sed "s|^|       [$P] |"; FOUND="$P"; }
+    done
+    [ -n "$FOUND" ] \
+      && echo "     → for the git step:  gcloud config set project $FOUND" \
+      || echo "       (no VMs found in any project)"
   fi
   if [ -n "$PROJ" ]; then
     if gcloud projects describe "$PROJ" >/dev/null 2>&1; then
@@ -96,8 +104,19 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
   || bad "not a git repo"
 
 head_ "Verdict"
+HOSTING_READY=yes
+command -v firebase >/dev/null 2>&1 || HOSTING_READY=no
+[ -x node_modules/.bin/vite ] || HOSTING_READY=no
+[ -f .firebaserc ] || HOSTING_READY=no
+if [ -z "${FIREBASE_TOKEN:-}" ] && ! firebase login:list 2>/dev/null | grep -qi '@'; then HOSTING_READY=no; fi
+
+if [ "$HOSTING_READY" = yes ]; then
+  TARGET=$(python3 -c "import json;print(json.load(open('.firebaserc'))['projects']['default'])" 2>/dev/null || echo "?")
+  printf '  \033[32mHosting deploy is ready → npm run deploy   (targets %s from .firebaserc)\033[0m\n' "$TARGET"
+fi
 if [ ${#FAILED[@]} -eq 0 ]; then
-  printf '  \033[32mEverything needed is in place. Run: npm run deploy\033[0m\n\n'
+  [ "$HOSTING_READY" = yes ] || printf '  \033[32mEverything needed is in place. Run: npm run deploy\033[0m\n'
+  printf '\n'
 else
   printf '  %d problem(s). Do this first:\n\n    \033[1m%s\033[0m\n\n' "${#FAILED[@]}" "$FIRST_FIX"
   echo "  Then re-run ./scripts/doctor.sh"
