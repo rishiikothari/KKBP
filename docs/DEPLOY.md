@@ -60,11 +60,12 @@ Do the Google migration **before** making the GitHub repo private, or that clone
 step needs credentials.
 
 If a **previous attempt already set the prefix** and node keeps disappearing,
-undo it once:
+you cannot undo it with npm — npm needs node, and node is what's missing. Repair
+the files directly:
 
 ```bash
-npm config delete prefix
-nvm use --lts
+bash scripts/fix-cloudshell-node.sh
+exec bash -l
 ```
 
 From a laptop with the CLIs installed, everything below works the same way.
