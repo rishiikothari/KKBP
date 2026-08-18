@@ -116,11 +116,11 @@ echo "  branches on the VM:"; git ls-remote --heads "$REMOTE" | sed 's/^/    /'
 
 cat <<DONE
 
-\u2713 Done. From now on:  npm run push:google
+Done. From now on:  npm run push:google
 
 Two things worth knowing:
-  \u2022 If you stop and start the VM its external IP changes — re-run
+  - If you stop and start the VM its external IP changes — re-run
     'gcloud compute config-ssh --project $PROJECT' and this remote keeps working.
-  \u2022 Confirm it's a real copy before retiring GitHub:
+  - Confirm it's a real copy before retiring GitHub:
       git clone ssh://$HOST$REPO_PATH /tmp/ttj-verify && git -C /tmp/ttj-verify log --oneline -3
 DONE
