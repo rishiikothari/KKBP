@@ -13,7 +13,7 @@ REMOTE="google"
 say() { printf '\n\033[1m▸ %s\033[0m\n' "$*"; }
 die() { printf '\n\033[31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 
-command -v gcloud >/dev/null || die "gcloud isn't installed. Install the Google Cloud CLI first."
+command -v gcloud >/dev/null || die "gcloud not found. On an iPad there is no way to install it — use Cloud Shell instead: https://shell.cloud.google.com"
 command -v git   >/dev/null || die "git isn't installed."
 
 # ---- 1. find the VM and the zone it landed in -------------------------------

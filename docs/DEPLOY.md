@@ -8,14 +8,48 @@ closest to Nagpur.
 
 ---
 
-## 1. Hosting the app on Firebase (replaces GitHub Pages)
+## 0. Where to run these commands
 
-One-time:
+**From an iPad, use Cloud Shell.** The Google Cloud CLI is not available for
+iPadOS — no terminal app can install `gcloud`, and the Firebase CLI needs Node,
+which isn't there either. Cloud Shell sidesteps all of it: it runs in Safari,
+comes with `gcloud`, `git`, `node`, `npm`, Java and Maven pre-installed, and is
+already signed in to this project.
+
+Open **[shell.cloud.google.com](https://shell.cloud.google.com)** (or the
+terminal icon, top-right of the Cloud console), then once:
 
 ```bash
-npm install -g firebase-tools
-firebase login
+git clone https://github.com/rishiikothari/KKBP.git ttj && cd ttj
 ```
+
+Your Cloud Shell home directory persists between sessions, so that clone stays
+put. Global npm installs do **not** persist, so point npm at your home directory
+first — then `firebase` survives restarts:
+
+```bash
+npm config set prefix ~/.npm-global
+echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc && source ~/.bashrc
+npm install -g firebase-tools
+```
+
+Do the Google migration **before** making the GitHub repo private, or that clone
+step needs credentials.
+
+From a laptop with the CLIs installed, everything below works the same way.
+
+---
+
+## 1. Hosting the app on Firebase (replaces GitHub Pages)
+
+One-time (skip the install if you did it in §0):
+
+```bash
+firebase login --no-localhost
+```
+
+`--no-localhost` matters in Cloud Shell and on tablets: it prints a URL to open
+and a code to paste back, instead of trying to open a browser on the machine.
 
 Then, from the repo root, any time you want to publish:
 
@@ -81,7 +115,7 @@ You connect as yourself over SSH, not as this account.
 
 ### Create the repo and wire it up — one command
 
-From your own machine, with `gcloud` installed and logged in:
+From Cloud Shell (or a laptop with `gcloud`):
 
 ```bash
 ./scripts/setup-git-remote.sh
