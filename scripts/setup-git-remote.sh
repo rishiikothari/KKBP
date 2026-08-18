@@ -93,22 +93,34 @@ git remote add "$REMOTE" "ssh://$HOST$REPO_PATH"
 git push "$REMOTE" --all
 git push "$REMOTE" --tags
 
+# The bare repo's HEAD points at refs/heads/main. If this clone is sitting on a
+# different branch, --all never creates main, HEAD stays dangling, and the repo
+# looks empty to anyone cloning it. Make sure main exists.
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if ! git ls-remote --heads "$REMOTE" main | grep -q 'refs/heads/main'; then
+  say "Creating main on the VM (this clone is on '$BRANCH')"
+  git push "$REMOTE" "HEAD:refs/heads/main"
+fi
+
 # ---- 5. prove it actually holds the history -------------------------------
 say "Verifying"
-LOCAL_HEAD=$(git rev-parse HEAD)
-REMOTE_HEAD=$(git ls-remote "$REMOTE" HEAD | awk '{print $1}')
-echo "  local  HEAD: $LOCAL_HEAD"
-echo "  remote HEAD: $REMOTE_HEAD"
-[ "$LOCAL_HEAD" = "$REMOTE_HEAD" ] || die "Remote HEAD doesn't match — do not retire GitHub yet."
+LOCAL=$(git rev-parse HEAD)
+REMOTE_BRANCH=$(git ls-remote "$REMOTE" "refs/heads/$BRANCH" | awk '{print $1}')
+REMOTE_MAIN=$(git ls-remote "$REMOTE" refs/heads/main | awk '{print $1}')
+echo "  local HEAD ($BRANCH) : $LOCAL"
+echo "  remote $BRANCH        : ${REMOTE_BRANCH:-(missing)}"
+echo "  remote main           : ${REMOTE_MAIN:-(missing)}"
+[ "$LOCAL" = "$REMOTE_BRANCH" ] || die "The VM's copy of '$BRANCH' doesn't match — do not retire GitHub yet."
+[ -n "$REMOTE_MAIN" ]           || die "No main branch on the VM — a fresh clone of it would look empty."
 echo "  branches on the VM:"; git ls-remote --heads "$REMOTE" | sed 's/^/    /'
 
 cat <<DONE
 
-✓ Done. From now on:  npm run push:google
+\u2713 Done. From now on:  npm run push:google
 
 Two things worth knowing:
-  • If you stop and start the VM its external IP changes — re-run
-    'gcloud compute config-ssh' and this remote keeps working.
-  • Confirm it's a real copy before retiring GitHub:
+  \u2022 If you stop and start the VM its external IP changes — re-run
+    'gcloud compute config-ssh --project $PROJECT' and this remote keeps working.
+  \u2022 Confirm it's a real copy before retiring GitHub:
       git clone ssh://$HOST$REPO_PATH /tmp/ttj-verify && git -C /tmp/ttj-verify log --oneline -3
 DONE

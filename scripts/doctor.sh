@@ -61,7 +61,18 @@ else
 fi
 
 head_ "Node and the build"
-command -v node >/dev/null 2>&1 && ok "node $(node -v)" || { bad "node missing"; fix "Use Cloud Shell"; }
+if command -v node >/dev/null 2>&1; then
+  ok "node $(node -v)  ($(command -v node))"
+else
+  bad "node not on PATH — 'npm: command not found' and \"env: 'node'\" both come from this"
+  if [ -d "$HOME/.nvm/versions/node" ]; then
+    echo "     nvm has these installed: $(ls "$HOME/.nvm/versions/node" 2>/dev/null | tr '\n' ' ')"
+    fix 'export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"; nvm use --lts'
+  else
+    fix "source ~/.bashrc   (if that does not help, open a fresh Cloud Shell tab)"
+  fi
+  echo "     PATH=$PATH"
+fi
 command -v npm  >/dev/null 2>&1 && ok "npm $(npm -v)"  || bad "npm missing"
 if [ -f package.json ]; then
   ok "in the repo (package.json found)"
