@@ -3,8 +3,20 @@
 Everything here is Rishi's to run — the app's code, config and rules live in this
 repo, but creating cloud resources needs your Google account.
 
-Project: **`kkbpdashv2`** · Region for anything new: **`asia-south1` (Mumbai)** —
-closest to Nagpur.
+**Two projects are in play** — worth knowing before anything confuses you:
+
+| What | Project | Why |
+|---|---|---|
+| App data, Auth, Hosting, Storage | **`kkbpdashv2`** | the Firebase project the app is configured against |
+| Git VM (`ttj-git-vm`, `asia-south1-c`) | **`kkbp-dash`** | where the VM was created |
+
+`firebase` commands read `.firebaserc`, so they always target `kkbpdashv2`
+regardless of which project `gcloud` has selected. The scripts here pass an
+explicit `--project` for VM work, so the two never collide. The account also has
+a third, unused `kkbpdash` — consolidating these three someday would remove a
+standing source of confusion.
+
+Region for anything new: **`asia-south1` (Mumbai)** — closest to Nagpur.
 
 ---
 
