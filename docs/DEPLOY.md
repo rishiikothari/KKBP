@@ -123,6 +123,10 @@ Then, from the repo root, any time you want to publish:
 npm run deploy
 ```
 
+If it dies mid-upload with `Error: An unexpected error has occurred`, that is
+transient — just run it again (`npx firebase deploy --only hosting` skips the
+rebuild). Deploys are idempotent.
+
 That builds the app and uploads it. First run prints a `…web.app` URL — the app
 is live there immediately. Every deploy is atomic and reversible: **Firebase
 console → Hosting → release history → Rollback**.
@@ -232,7 +236,15 @@ and 100%. It won't stop spend, but nothing surprises you.
 
 ---
 
-## 5. Order to do it in
+## 5. Where things stand
+
+- **Source on the VM** — done. `ttj-git-vm` / `asia-south1-c` / `kkbp-dash`,
+  both branches verified against local SHAs.
+- **Hosting live** — done. <https://kkbpdashv2.web.app>, serving from
+  `kkbpdashv2` with the security headers from `firebase.json` applied.
+- **Remaining** — custom domain, authorized domains, then retire GitHub Pages.
+
+## 6. Order to do it in
 
 1. `npm run deploy` → confirm the app works at the `…web.app` URL.
 2. Add `team.kkbusinesspark.com` in Hosting; add the DNS record.
