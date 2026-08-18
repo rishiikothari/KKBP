@@ -79,6 +79,24 @@ export FIREBASE_TOKEN="paste-the-token"   # add to ~/.bashrc to keep it
 
 Treat that token like a password: it grants deploy rights to the project.
 
+### Provision the Hosting site — once, before the first deploy
+
+A Firebase project has no Hosting site until Hosting is switched on. Deploying
+before that fails with *"Assertion failed: resolving hosting target of a site
+with no site name or target name"*, which does not explain itself at all.
+
+Either open **Firebase console → Hosting → Get started** (click through; no need
+to run the commands it shows), or do it from the shell:
+
+```bash
+firebase hosting:sites:list                        # is there one already?
+firebase hosting:sites:create kkbpdashv2           # if not
+```
+
+`firebase.json` pins `"site": "kkbpdashv2"` so the deploy target can never be
+ambiguous — which matters when the account can see three similarly-named KKBP
+projects.
+
 Then, from the repo root, any time you want to publish:
 
 ```bash
