@@ -260,3 +260,80 @@ export async function uploadToStorage(fbConfig, path, blob, onProgress) {
       async () => resolve(await getDownloadURL(task.snapshot.ref)));
   });
 }
+
+/* ---------- reading a contractor's programme (Gantt) from an image or PDF ----------
+   The hard part isn't extraction, it's honesty: a bar measured against a
+   printed axis is an estimate, and a sequence that merely looks like a chain
+   is not a dependency. The model is required to say which is which for every
+   row, so the review screen can mark what a human still has to check. */
+
+export async function analyseProgramme({ key, images, pdfText, filename, trades, phases, today, existingNames }) {
+  const guide = `You are reading a construction programme — a Gantt chart or bar-chart schedule — for "The Town Junction", a shopping mall under construction in Nagpur, India. The image(s) are a photograph, scan or PDF page of a programme issued by the contractor or PMC.${pdfText ? " Text extracted from the same PDF follows the images; prefer it over the image for exact names and dates." : ""}
+
+Extract every work item you can read. Return ONLY JSON:
+{"isProgramme": true|false,
+ "projectName": "",
+ "revision": "revision number/date printed on the sheet, or ''",
+ "dateConvention": "DD/MM/YYYY|MM/DD/YYYY|none-printed",
+ "axisRange": "what the timeline axis spans, e.g. 'Jan 2026 - Mar 2028', or '' if there is no axis",
+ "items": [{"name":"", "trade":"", "phase":"", "contractor":"",
+            "start":"YYYY-MM-DD", "target":"YYYY-MM-DD",
+            "pct":0, "status":"Planned|In Progress|On Hold|Done", "milestone":false,
+            "deps":[{"name":"exact name of the predecessor row","lag":0}],
+            "depsBasis":"drawn-link|predecessor-column|inferred-from-sequence|none",
+            "dateBasis":"printed|read-from-bar",
+            "confidence":"high|medium|low", "note":""}],
+ "unreadable": ["anything visible but not legible enough to trust"],
+ "warnings": [""]}
+
+Rules that matter more than completeness:
+
+DATES. If a row prints its start/finish dates, copy them and set dateBasis "printed". Dates on an Indian programme are DD/MM/YYYY: 03/07/2026 is 3 July 2026, never 3 March. If there are no printed dates, measure the bar against the timeline axis, interpolate, and set dateBasis "read-from-bar" with confidence "medium" or "low" — never "high". Never output a year the axis or a printed date does not support; leave the field "" instead of guessing.
+
+DEPENDENCIES. Assert a dependency only when there is a drawn arrow or link between bars, or a "predecessor"/"depends on"/"successor" column naming it. If you are only assuming the customary sequence, still report it but set depsBasis "inferred-from-sequence" so a human checks it before it is trusted. Name each predecessor exactly as that row is written on the sheet.
+
+VOCABULARY. trade must be one of: ${trades}. Use "Other" when none fits. phase must be one of: ${phases}.
+
+MILESTONES. A diamond marker or a zero-duration row is a milestone: set milestone true and put the same date in start and target.
+
+PROGRESS. Set pct only from a printed percentage or a clearly part-shaded bar. Otherwise 0.
+
+STRUCTURE. Do not merge two rows or split one. Do not return summary/roll-up rows ("TOTAL", "Phase 1 summary", section headers) as items — name them in warnings instead. If the picture is not a programme at all, set isProgramme false, return no items, and say what it is in warnings.
+${existingNames ? `\nALREADY TRACKED. These items already exist in the dashboard. If a row on the sheet is clearly one of them, use that exact existing name so the revision updates it instead of creating a duplicate:\n${existingNames}\n` : ""}
+Today is ${today}.`;
+
+  const content = [
+    ...images.map((im) => ({ type: "image", source: { type: "base64", media_type: im.media_type, data: im.data } })),
+    ...(pdfText ? [{ type: "text", text: `TEXT EXTRACTED FROM THE PDF:\n${pdfText.slice(0, 24000)}` }] : []),
+    { type: "text", text: guide },
+  ];
+  return await anthropicJSON({ key, content, max_tokens: 8000 });
+}
+
+/* Turn whatever the Owner picked — photos, a scan, a PDF — into the page
+   images the vision call needs. Gantt text is small, so these go up at a
+   higher resolution than the WhatsApp triage path uses. */
+export async function programmePages(files, { maxPages = 8, maxDim = 1568 } = {}) {
+  const images = []; const texts = []; const skipped = [];
+  for (const f of files) {
+    if (images.length >= maxPages) { skipped.push(`${f.name} (page limit reached)`); continue; }
+    const kind = classifyKind(f.name);
+    try {
+      if (kind === "pdf") {
+        const got = await pdfExtract(f, Math.min(maxPages - images.length, 8), maxDim);
+        images.push(...got.images);
+        if (got.text) texts.push(got.text);
+        if (got.pages > got.images.length) skipped.push(`${f.name} pages ${got.images.length + 1}-${got.pages}`);
+      } else if (kind === "image") {
+        images.push(await downscaleImage(f, maxDim));
+      } else {
+        skipped.push(`${f.name} (not an image or PDF)`);
+      }
+    } catch (e) {
+      /* an HEIC on a browser that can't decode it, a corrupt PDF — say so and
+         carry on with the pages that did work */
+      skipped.push(`${f.name} (could not be read on this device)`);
+    }
+  }
+  return { images, pdfText: texts.join("\n\n").trim(), skipped };
+}

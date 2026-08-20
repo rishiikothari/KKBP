@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import * as WA from "./importer.js";
 import { scheduleWorks, plannedDuration, fromDay, addDays, daysBetween } from "./schedule.js";
+import { normaliseProposals, planMerge, applyMerge } from "./programme.js";
 /* The security rules shown in Team & Access are read from the very files that
    `npm run deploy:rules` publishes, so what you read here is always what is
    actually enforced — no second copy to drift out of date. */
@@ -793,7 +794,7 @@ function DialogHost() {
 
 const Modal = ({ title, onClose, children, wide }) => (
   <div style={{ position: "fixed", inset: 0, background: "#000A", zIndex: 50, display: "flex", alignItems: "flex-start", justifyContent: "center", overflowY: "auto", padding: "calc(env(safe-area-inset-top, 0px) + 40px) 12px calc(env(safe-area-inset-bottom, 0px) + 40px)" }} onClick={onClose}>
-    <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 12, width: "100%", maxWidth: wide ? 760 : 560 }}>
+    <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 12, width: "100%", maxWidth: wide === "xl" ? 1120 : wide ? 760 : 560 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: `1px solid ${C.line}` }}>
         <div style={{ fontFamily: SERIF, fontSize: 16, color: C.text }}>{title}</div>
         <X size={18} color={C.mute} style={{ cursor: "pointer" }} onClick={onClose} />
@@ -1957,8 +1958,304 @@ const toDayLocal = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s |
 /* replace the works collection wholesale (used by re-baselining) */
 const withLogWorks = (s, works) => ({ ...s, works });
 
+/* ---------------------------------------------------------------------------
+   Reading a contractor's programme off a photograph.
+
+   The consultant issues a revised Gantt as a PDF, or the site engineer
+   photographs the one pinned to the site-office wall. Re-typing forty rows is
+   how a programme stops being kept up to date, so this reads the sheet and
+   proposes the changes — but nothing is written until the Owner has looked at
+   every row. A bar measured off a printed axis is an estimate, and the screen
+   says so rather than presenting it as fact.
+   --------------------------------------------------------------------------- */
+
+const BASIS_LABEL = { "drawn-link": "linked on the sheet", "predecessor-column": "named on the sheet", "inferred-from-sequence": "assumed from the order", none: "" };
+
+function ProgrammeImport({ state, setState, onClose }) {
+  const [step, setStep] = useState("pick");
+  const [files, setFiles] = useState([]);
+  const [busy, setBusy] = useState("");
+  const [err, setErr] = useState("");
+  const [meta, setMeta] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [dropped, setDropped] = useState([]);
+  const [result, setResult] = useState(null);
+  const key = (state.aiKey || "").trim();
+  const works = state.works || [];
+
+  const setRow = (i, patch) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const counts = rows.reduce((a, r) => { a[r.action] = (a[r.action] || 0) + 1; return a; }, {});
+  const willWrite = (counts.new || 0) + (counts.update || 0);
+
+  const pick = (e) => {
+    setErr("");
+    setFiles(Array.from(e.target.files || []).slice(0, 10));
+  };
+
+  const run = async () => {
+    setErr(""); setStep("reading");
+    try {
+      setBusy("Rendering the pages…");
+      const pg = await WA.programmePages(files);
+      if (!pg.images.length) throw new Error("NO_PAGES");
+      setBusy(`Reading ${pg.images.length} page${pg.images.length > 1 ? "s" : ""} — this takes up to a minute…`);
+      const out = await WA.analyseProgramme({
+        key,
+        images: pg.images,
+        pdfText: pg.pdfText,
+        filename: files.map((f) => f.name).join(", "),
+        trades: WORK_TRADES.join(", "),
+        phases: WORK_PHASES.join(", "),
+        today: today(),
+        existingNames: works.slice(0, 150).map((w) => `- ${w.name}`).join("\n"),
+      });
+      const cleaned = normaliseProposals(out.items, { trades: WORK_TRADES, phases: WORK_PHASES, statuses: WSTATUS });
+      setMeta({ ...out, pageSkips: pg.skipped, pages: pg.images.length, usedText: !!pg.pdfText });
+      setDropped(cleaned.dropped);
+      setRows(planMerge(cleaned.items, works));
+      setStep("review");
+    } catch (e) {
+      const m = e && e.message;
+      setErr(
+        m === "NEED_KEY" ? "The team AI key is missing or was rejected. Set it under Security → AI key."
+        : m === "RATE_LIMIT" ? "The AI is rate-limited right now. Wait a minute and try again."
+        : m === "NO_PAGES" ? "Nothing readable in those files — the importer takes photos, scans and PDFs."
+        : /^API_/.test(m || "") ? `The AI service returned an error (${m.slice(4)}). Try again.`
+        : `Could not read that: ${m || "unknown error"}`
+      );
+      setStep("pick");
+    } finally { setBusy(""); }
+  };
+
+  const apply = async () => {
+    const source = files.map((f) => f.name).join(", ").slice(0, 120);
+    const res = applyMerge(rows, works, { newId: uid, source, today: today() });
+    /* Guard against the one failure that would be invisible: a merged
+       programme the scheduler can't resolve. applyMerge already cuts circular
+       links, so this is a belt-and-braces check before anything is written. */
+    const check = scheduleWorks(res.works, { today: today() });
+    if (check.cycles && check.cycles.length) {
+      setErr("That import would leave the programme circular, so nothing was written. Set the affected predecessors by hand.");
+      return;
+    }
+    /* Written by id rather than by replacing the array, so an item another
+       device added while this was on screen is not lost. */
+    const byId = new Map(res.works.map((w) => [w.id, w]));
+    setState((s) => {
+      const live = s.works || [];
+      const seen = new Set(live.map((w) => w.id));
+      const next = live.map((w) => byId.get(w.id) || w);
+      for (const w of res.works) if (!seen.has(w.id)) next.push(w);
+      return withLogWorks(s, next);
+    });
+    setResult(res);
+    setStep("done");
+  };
+
+  const Chip = ({ text, color }) => <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 10, border: `1px solid ${color}44`, color, background: `${color}14`, whiteSpace: "nowrap" }}>{text}</span>;
+
+  return (
+    <Modal title="Read a programme from a photo or PDF" onClose={onClose} wide="xl">
+      {err && (
+        <div style={{ background: `${C.red}14`, border: `1px solid ${C.red}44`, borderRadius: 8, padding: "10px 12px", fontSize: 12.5, color: C.text, marginBottom: 14, display: "flex", gap: 8 }}>
+          <AlertTriangle size={15} color={C.red} style={{ flexShrink: 0, marginTop: 1 }} />{err}
+        </div>
+      )}
+
+      {step === "pick" && (
+        <div>
+          <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.7, marginBottom: 14 }}>
+            Send in the Gantt your consultant or contractor issued — a PDF, a scan, or a photo of the chart on the site-office wall. It gets read into work items with their dates and predecessors, and you review every row before anything changes. A revision updates the items you already track instead of duplicating them, and <b>agreed baselines and recorded actual dates are never overwritten</b>.
+          </div>
+          <label style={{ display: "block", border: `1px dashed ${C.lineInput}`, borderRadius: 10, padding: 20, textAlign: "center", cursor: "pointer", background: C.panel3 }}>
+            <Upload size={22} color={C.gold} />
+            <div style={{ fontSize: 13, color: C.text, marginTop: 8 }}>Choose photos or a PDF</div>
+            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 3 }}>Up to 8 pages per run. On an iPhone or iPad, Take Photo works here too.</div>
+            <input type="file" accept="image/*,application/pdf" multiple onChange={pick} style={{ display: "none" }} />
+          </label>
+
+          {files.length > 0 && (
+            <div style={{ marginTop: 12, border: `1px solid ${C.line}`, borderRadius: 8, overflow: "hidden" }}>
+              {files.map((f, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 11px", fontSize: 12, color: C.text, borderBottom: i < files.length - 1 ? `1px solid ${C.lineSoft}` : "none" }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+                  <span style={{ color: C.faint, flexShrink: 0 }}>{WA.humanSize(f.size)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!key && (
+            <div style={{ marginTop: 12, fontSize: 12, color: C.amber, display: "flex", gap: 7 }}>
+              <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+              Reading a chart needs the team AI key. Set it under Security → AI key, then come back.
+            </div>
+          )}
+          <div style={{ marginTop: 12, fontSize: 11, color: C.faint, lineHeight: 1.6 }}>
+            The pages are sent to Anthropic to be read. Don't put anything through here that shouldn't leave the company.
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+            <Btn ghost tone={C.mute} onClick={onClose}>Cancel</Btn>
+            <Btn onClick={run} disabled={!files.length || !key}><Sparkles size={14} /> Read the programme</Btn>
+          </div>
+        </div>
+      )}
+
+      {step === "reading" && (
+        <div style={{ padding: "34px 10px", textAlign: "center" }}>
+          <Loader2 size={26} color={C.gold} className="spin" />
+          <div style={{ fontSize: 13.5, color: C.text, marginTop: 12 }}>{busy || "Working…"}</div>
+          <div style={{ fontSize: 11.5, color: C.faint, marginTop: 6 }}>Keep this window open.</div>
+        </div>
+      )}
+
+      {step === "review" && (
+        <div>
+          {meta && meta.isProgramme === false && (
+            <div style={{ background: `${C.amber}14`, border: `1px solid ${C.amber}44`, borderRadius: 8, padding: "10px 12px", fontSize: 12.5, color: C.text, marginBottom: 12 }}>
+              This doesn't look like a programme chart{(meta.warnings || []).length ? `: ${meta.warnings[0]}` : "."} Anything found below is probably not worth importing.
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10, fontSize: 12, color: C.mute }}>
+            {meta && meta.projectName && <Chip text={meta.projectName} color={C.blue} />}
+            {meta && meta.revision && <Chip text={`Rev ${meta.revision}`} color={C.blue} />}
+            {meta && meta.axisRange && <Chip text={`Axis ${meta.axisRange}`} color={C.mute} />}
+            {meta && meta.dateConvention === "none-printed" && <Chip text="no printed dates — all dates measured off the bars" color={C.amber} />}
+            {meta && meta.dateConvention && meta.dateConvention !== "none-printed" && <Chip text={`dates read as ${meta.dateConvention}`} color={C.mute} />}
+            {meta && meta.usedText && <Chip text="PDF text used" color={C.green} />}
+          </div>
+
+          {rows.length === 0 ? (
+            <Empty text="No work items could be read off those pages. A sharper, straighter photo of the chart usually fixes it." />
+          ) : (
+            <>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+                <div style={{ fontSize: 12.5, color: C.text }}>
+                  <b>{counts.new || 0}</b> to add · <b>{counts.update || 0}</b> to update · <b>{counts.skip || 0}</b> skipped
+                </div>
+                <div style={{ flex: 1 }} />
+                <Btn ghost small tone={C.mute} onClick={() => setRows((rs) => rs.map((r) => ({ ...r, action: "skip" })))}>Skip all</Btn>
+                <Btn ghost small tone={C.mute} onClick={() => setRows((rs) => rs.map((r) => ({ ...r, action: r.match ? "update" : "new" })))}>Reset</Btn>
+              </div>
+
+              <div style={{ overflowX: "auto", border: `1px solid ${C.line}`, borderRadius: 8, maxHeight: "50vh", overflowY: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 940 }}>
+                  <thead style={{ position: "sticky", top: 0, background: C.panel2, zIndex: 1 }}>
+                    <tr><Th>Do what</Th><Th>Work item</Th><Th>Trade</Th><Th>Starts</Th><Th>Ends</Th><Th>How it was read</Th><Th>After</Th></tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, i) => {
+                      const attention = r.needsDates || r.dateSuspect || r.confidence === "low";
+                      const dim = r.action === "skip";
+                      return (
+                        <tr key={i} style={{ opacity: dim ? 0.42 : 1, borderLeft: `3px solid ${attention && !dim ? C.amber : "transparent"}` }}>
+                          <Td style={{ minWidth: 132, padding: "7px 6px" }}>
+                            <select value={r.action} onChange={(e) => setRow(i, { action: e.target.value })} style={{ ...inputSt, padding: "5px 7px", fontSize: 11.5 }}>
+                              <option value="new">Add as new</option>
+                              {r.match && <option value="update">Update existing</option>}
+                              <option value="skip">Skip</option>
+                            </select>
+                            {r.action === "update" && r.match && (
+                              <div title={`matched ${Math.round(r.match.score * 100)}%`} style={{ fontSize: 10.5, color: C.faint, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 132 }}>→ {r.match.name}</div>
+                            )}
+                          </Td>
+                          <Td style={{ minWidth: 190, padding: "7px 6px" }}>
+                            <Inp value={r.name} onChange={(e) => setRow(i, { name: e.target.value })} style={{ padding: "5px 7px", fontSize: 12 }} />
+                            {r.note && <div style={{ fontSize: 10.5, color: C.faint, marginTop: 3 }}>{r.note}</div>}
+                          </Td>
+                          <Td style={{ minWidth: 142, padding: "7px 6px" }}>
+                            <select value={r.trade} onChange={(e) => setRow(i, { trade: e.target.value })} style={{ ...inputSt, padding: "5px 7px", fontSize: 11.5 }}>
+                              {WORK_TRADES.map((t) => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                            <select value={r.phase} onChange={(e) => setRow(i, { phase: e.target.value })} style={{ ...inputSt, padding: "5px 7px", fontSize: 11.5, marginTop: 3 }}>
+                              {WORK_PHASES.map((t) => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                          </Td>
+                          <Td style={{ minWidth: 118, padding: "7px 6px" }}><Inp type="date" value={r.start} onChange={(e) => setRow(i, { start: e.target.value, needsDates: !e.target.value || !r.target })} style={{ padding: "5px 7px", fontSize: 11.5 }} /></Td>
+                          <Td style={{ minWidth: 118, padding: "7px 6px" }}><Inp type="date" value={r.target} onChange={(e) => setRow(i, { target: e.target.value, needsDates: !r.start || !e.target.value })} style={{ padding: "5px 7px", fontSize: 11.5 }} /></Td>
+                          <Td style={{ minWidth: 118, padding: "7px 6px" }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" }}>
+                              {(r.start || r.target) && <Chip text={r.dateBasis === "printed" ? "dates printed" : "measured off the bar"} color={r.dateBasis === "printed" ? C.green : C.amber} />}
+                              {r.confidence !== "high" && <Chip text={`${r.confidence} confidence`} color={r.confidence === "low" ? C.red : C.amber} />}
+                              {r.needsDates && <Chip text="date missing" color={C.red} />}
+                              {r.milestone && <Chip text="milestone" color={C.gold} />}
+                            </div>
+                          </Td>
+                          <Td style={{ minWidth: 138, padding: "7px 6px", fontSize: 11.5 }}>
+                            {r.deps.length ? (
+                              <>
+                                <div style={{ color: C.text }}>{r.deps.map((d) => d.name + (d.lag ? ` +${d.lag}d` : "")).join(", ")}</div>
+                                {BASIS_LABEL[r.depsBasis] && <div style={{ fontSize: 10.5, color: r.depsBasis === "inferred-from-sequence" ? C.amber : C.faint, marginTop: 2 }}>{BASIS_LABEL[r.depsBasis]}</div>}
+                              </>
+                            ) : <span style={{ color: C.faint }}>—</span>}
+                          </Td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {(dropped.length > 0 || (meta && ((meta.unreadable || []).length || (meta.warnings || []).length || (meta.pageSkips || []).length))) && (
+            <div style={{ marginTop: 12, background: C.panel3, border: `1px solid ${C.line}`, borderRadius: 8, padding: "10px 12px", fontSize: 11.5, color: C.mute, lineHeight: 1.7 }}>
+              <div style={{ color: C.text, fontSize: 12, marginBottom: 4 }}>What was left out</div>
+              {dropped.map((d, i) => <div key={`d${i}`}>· {d.name} — {d.why}</div>)}
+              {(meta.unreadable || []).map((u, i) => <div key={`u${i}`}>· couldn't read: {u}</div>)}
+              {(meta.warnings || []).filter(Boolean).map((w, i) => <div key={`w${i}`}>· {w}</div>)}
+              {(meta.pageSkips || []).map((s, i) => <div key={`p${i}`}>· not read: {s}</div>)}
+            </div>
+          )}
+
+          <div style={{ fontSize: 11, color: C.faint, marginTop: 12, lineHeight: 1.6 }}>
+            Rows marked in amber need your eye — a date measured off a bar is an estimate, not a commitment. Predecessors labelled “assumed from the order” were not drawn on the sheet; they change the critical path, so check them.
+          </div>
+
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
+            <Btn ghost tone={C.mute} onClick={() => { setStep("pick"); setErr(""); }}>Back</Btn>
+            <Btn onClick={apply} disabled={!willWrite}><CheckCircle2 size={14} /> {willWrite ? `Apply ${willWrite} change${willWrite > 1 ? "s" : ""}` : "Nothing selected"}</Btn>
+          </div>
+        </div>
+      )}
+
+      {step === "done" && result && (
+        <div>
+          <div style={{ display: "flex", gap: 9, alignItems: "flex-start", marginBottom: 12 }}>
+            <CheckCircle2 size={20} color={C.green} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div style={{ fontSize: 13.5, color: C.text, lineHeight: 1.6 }}>
+              Programme updated — {result.created.length} item{result.created.length === 1 ? "" : "s"} added, {result.updated.length} updated
+              {result.skipped.length ? `, ${result.skipped.length} skipped` : ""}.
+            </div>
+          </div>
+          {result.unresolved.length > 0 && (
+            <div style={{ background: `${C.amber}14`, border: `1px solid ${C.amber}44`, borderRadius: 8, padding: "10px 12px", fontSize: 12, color: C.text, marginBottom: 10, lineHeight: 1.7 }}>
+              <b>Predecessors that couldn't be matched</b> — set these by hand, or import the page that has them:
+              {result.unresolved.slice(0, 8).map((u, i) => <div key={i} style={{ color: C.mute }}>· {u.item} → “{u.dep}”</div>)}
+            </div>
+          )}
+          {result.cyclesBroken.length > 0 && (
+            <div style={{ background: `${C.red}14`, border: `1px solid ${C.red}44`, borderRadius: 8, padding: "10px 12px", fontSize: 12, color: C.text, marginBottom: 10, lineHeight: 1.7 }}>
+              <b>Circular links removed</b> — these would have meant two items each waiting for the other:
+              {result.cyclesBroken.map((c, i) => <div key={i} style={{ color: C.mute }}>· {c.item} → {c.dep}</div>)}
+            </div>
+          )}
+          <div style={{ fontSize: 12, color: C.faint, lineHeight: 1.7 }}>
+            Check the Gantt — the forecast completion date and the critical path have been recalculated. If the new plan is signed off, use <b>Re-baseline</b> so slippage is measured from it; until then the old baseline stands and the gap shows as slip.
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+            <Btn onClick={onClose} autoFocus>Done</Btn>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function Works({ state, setState, canWrite }) {
   const [edit, setEdit] = useState(null);
+  const [importing, setImporting] = useState(false);
   const [view, setView] = useState("gantt");
   const [filterTrade, setFilterTrade] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
@@ -2021,6 +2318,7 @@ function Works({ state, setState, canWrite }) {
         <Sel value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} options={["All", ...WSTATUS]} style={{ width: 140 }} />
         <div style={{ flex: 1 }} />
         {canWrite && all.length > 0 && <Btn ghost small onClick={rebaseline}><CalendarDays size={13} /> Re-baseline</Btn>}
+        {canWrite && <Btn ghost small onClick={() => setImporting(true)}><Upload size={13} /> Import a Gantt</Btn>}
         {canWrite && <Btn onClick={() => setEdit(blankWork())}><Plus size={14} /> Add work item</Btn>}
       </div>
 
@@ -2146,6 +2444,8 @@ function Works({ state, setState, canWrite }) {
           })()}
         </>
       )}
+
+      {importing && <ProgrammeImport state={state} setState={setState} onClose={() => setImporting(false)} />}
 
       {edit && (
         <Modal title={edit.id ? `Edit — ${edit.name}` : "Add work item"} onClose={() => setEdit(null)} wide>
