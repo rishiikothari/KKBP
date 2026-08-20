@@ -9,6 +9,7 @@ import {
   Menu, Upload, Film, Image as ImageIcon, FileCheck2,
 } from "lucide-react";
 import * as WA from "./importer.js";
+import { scheduleWorks, plannedDuration, fromDay, addDays, daysBetween } from "./schedule.js";
 /* The security rules shown in Team & Access are read from the very files that
    `npm run deploy:rules` publishes, so what you read here is always what is
    actually enforced — no second copy to drift out of date. */
@@ -155,7 +156,7 @@ const WORK_PHASES = ["Shell & Core","External Works","Services","Finishes","Fit-
 const WSTATUS = ["Planned","In Progress","On Hold","Done"];
 const WSTATUS_COLOR = { Planned: C.faint, "In Progress": C.amber, "On Hold": C.red, Done: C.green };
 const SEED_WORKS = [];
-const blankWork = () => ({ id: "", name: "", trade: WORK_TRADES[0], phase: WORK_PHASES[0], contractor: "", floor: "", start: "", target: "", status: "Planned", pct: 0, capexId: "", notes: "" });
+const blankWork = () => ({ id: "", name: "", trade: WORK_TRADES[0], phase: WORK_PHASES[0], contractor: "", floor: "", start: "", target: "", status: "Planned", pct: 0, capexId: "", notes: "", deps: [], milestone: false, baseStart: "", baseTarget: "", actualStart: "", actualFinish: "" });
 
 const SEED_CAMPAIGNS = [];
 
@@ -1757,64 +1758,241 @@ function Capex({ state, setState, canWrite }) {
 
 /* ================= WORK SCHEDULE (construction programme) ================= */
 /* The development team's own register: every piece of site work — planned, in
-   progress, on hold or done — with contractor, dates and % complete. Kept
-   separate from Tasks (personal to-dos) and Capex (money): this is the
-   programme. Three views: table, board and a dependency-free timeline. */
-function WorksTimeline({ items }) {
-  const ds = items.filter((w) => w.start && w.target && +new Date(w.target) >= +new Date(w.start));
-  if (!ds.length) return <Empty text="Add start and target dates to work items to see them on the timeline." />;
-  const min = Math.min(...ds.map((w) => +new Date(w.start)));
-  const max = Math.max(...ds.map((w) => +new Date(w.target)));
-  const span = Math.max(86400000, max - min);
-  const pos = (d) => Math.min(100, Math.max(0, ((+new Date(d)) - min) / span * 100));
-  /* month ticks across the span */
+   progress, on hold or done — with contractor, dates, dependencies and %
+   complete. Kept separate from Tasks (personal to-dos) and Capex (money): this
+   is the programme. Scheduling maths lives in schedule.js and is unit-tested. */
+
+const GANTT_ZOOM = [
+  { key: "quarter", label: "Quarter", px: 2.2, tick: "month" },
+  { key: "month",   label: "Month",   px: 6,   tick: "month" },
+  { key: "week",    label: "Week",    px: 16,  tick: "week" },
+];
+
+/* A real Gantt: bars positioned by date, the baseline showing as a ghost behind
+   the forecast, dependency arrows drawn between them, and the critical path
+   picked out — the chain that actually decides when the mall opens. */
+function GanttChart({ works, sched, onPick }) {
+  const [zoomKey, setZoomKey] = useState("month");
+  const [showDeps, setShowDeps] = useState(true);
+  const scrollRef = React.useRef(null);
+  const todayRef = React.useRef(0);
+  /* A three-year programme at week zoom is metres wide. Open it where the work
+     actually is — today a quarter in from the left — rather than at the far
+     left, which on a started job is all finished history. */
+  const toToday = React.useCallback((smooth) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const to = Math.max(0, todayRef.current - el.clientWidth * 0.28);
+    if (smooth && el.scrollTo) el.scrollTo({ left: to, behavior: "smooth" });
+    else el.scrollLeft = to;
+  }, []);
+  React.useEffect(() => { toToday(false); }, [zoomKey, toToday]);
+  const zoom = GANTT_ZOOM.find((z) => z.key === zoomKey) || GANTT_ZOOM[1];
+  const dated = works.filter((w) => sched.byId[w.id]);
+  if (!dated.length) return <Empty text="Add work items with dates to see the programme." />;
+
+  const ROW = 30, LABEL = 200, PAD = 10;
+  const lo = Math.min(sched.today, ...dated.map((w) => sched.byId[w.id].start)) - 7;
+  const hi = Math.max(sched.today, ...dated.map((w) => sched.byId[w.id].finish)) + 14;
+  const days = Math.max(1, hi - lo);
+  const W = Math.max(560, Math.round(days * zoom.px));
+  const x = (day) => Math.round((day - lo) * (W / days));
+  todayRef.current = LABEL + x(sched.today);
+
+  /* group by construction phase — the order site people think in */
+  const groups = [];
+  for (const ph of WORK_PHASES) {
+    const rows = dated.filter((w) => w.phase === ph);
+    if (rows.length) groups.push({ phase: ph, rows });
+  }
+  const ungrouped = dated.filter((w) => !WORK_PHASES.includes(w.phase));
+  if (ungrouped.length) groups.push({ phase: "Other", rows: ungrouped });
+
+  /* flatten to rows, remembering each item's y so arrows can find it */
+  const layout = []; let y = 0;
+  for (const g of groups) {
+    layout.push({ kind: "group", label: g.phase, y }); y += 24;
+    for (const w of g.rows) { layout.push({ kind: "row", w, y }); y += ROW; }
+  }
+  const yOf = {}; layout.forEach((l) => { if (l.kind === "row") yOf[l.w.id] = l.y; });
+  const H = y + PAD;
+
+  /* month/week gridlines and their labels */
   const ticks = [];
-  { const t = new Date(min); t.setDate(1); for (; +t <= max; t.setMonth(t.getMonth() + 1)) if (+t >= min) ticks.push({ p: pos(t), label: t.toLocaleDateString("en-IN", { month: "short", year: "2-digit" }) }); }
-  const tp = pos(today());
+  { const d = new Date(fromDay(lo) + "T00:00:00Z");
+    if (zoom.tick === "month") { d.setUTCDate(1); }
+    else { d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); }
+    for (let guard = 0; guard < 400; guard++) {
+      const day = Math.round(+d / 86400000);
+      if (day > hi) break;
+      if (day >= lo) ticks.push({ day, label: zoom.tick === "month"
+        ? d.toLocaleDateString("en-IN", { month: "short", year: "2-digit", timeZone: "UTC" })
+        : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: "UTC" }) });
+      if (zoom.tick === "month") d.setUTCMonth(d.getUTCMonth() + 1); else d.setUTCDate(d.getUTCDate() + 7);
+    }
+  }
+
+  const arrows = [];
+  if (showDeps) {
+    for (const w of dated) {
+      for (const d of (w.deps || [])) {
+        const from = sched.byId[d.id], to = sched.byId[w.id];
+        if (!from || !to || yOf[d.id] === undefined || yOf[w.id] === undefined) continue;
+        const x1 = x(from.finish + 1), y1 = yOf[d.id] + ROW / 2;
+        const x2 = x(to.start), y2 = yOf[w.id] + ROW / 2;
+        const crit = from.critical && to.critical;
+        const mid = Math.max(x1 + 6, x2 - 10);
+        arrows.push({ key: `${d.id}-${w.id}`, crit,
+          path: `M ${x1} ${y1} H ${mid} V ${y2} H ${x2}` });
+      }
+    }
+  }
+
+  const tone = (r, w) => r.done ? C.green : r.critical ? C.red : r.overdue ? C.amber : WSTATUS_COLOR[w.status] || C.blue;
+
   return (
-    <div style={{ overflowX: "auto" }}>
-      <div style={{ minWidth: 640 }}>
-        <div style={{ position: "relative", height: 18, marginLeft: 190 }}>
-          {ticks.map((t, i) => <div key={i} style={{ position: "absolute", left: `${t.p}%`, fontSize: 10, color: C.faint, whiteSpace: "nowrap" }}>{t.label}</div>)}
+    <div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+        <div style={{ display: "flex", gap: 4 }}>
+          {GANTT_ZOOM.map((z) => (
+            <button key={z.key} onClick={() => setZoomKey(z.key)} style={{ padding: "5px 11px", borderRadius: 7, border: `1px solid ${zoomKey === z.key ? C.gold : C.line}`, background: zoomKey === z.key ? `${C.gold}1A` : "transparent", color: zoomKey === z.key ? C.gold : C.mute, fontSize: 12, cursor: "pointer", fontFamily: SANS }}>{z.label}</button>
+          ))}
         </div>
-        {ds.map((w) => {
-          const l = pos(w.start), r = pos(w.target);
-          const late = isOverdue(w.target, w.status === "Done");
-          const tone = WSTATUS_COLOR[w.status] || C.faint;
-          return (
-            <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
-              <div style={{ width: 182, flexShrink: 0, fontSize: 12, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={w.name}>{w.name}</div>
-              <div style={{ position: "relative", flex: 1, height: 18, background: C.panel3, borderRadius: 4 }}>
-                {tp >= 0 && tp <= 100 && <div style={{ position: "absolute", left: `${tp}%`, top: -2, bottom: -2, width: 1, background: C.gold, opacity: 0.8 }} />}
-                <div style={{ position: "absolute", left: `${l}%`, width: `${Math.max(1.5, r - l)}%`, top: 2, bottom: 2, background: `${tone}30`, border: late ? `1px solid ${C.red}` : `1px solid ${tone}55`, borderRadius: 3, overflow: "hidden" }}>
-                  <div style={{ width: `${Math.min(100, Math.max(0, num(w.pct)))}%`, height: "100%", background: `${tone}88` }} />
-                </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.mute, cursor: "pointer" }}>
+          <input type="checkbox" checked={showDeps} onChange={(e) => setShowDeps(e.target.checked)} /> Links
+        </label>
+        <button onClick={() => toToday(true)} title="Scroll back to today"
+          style={{ padding: "5px 11px", borderRadius: 7, border: `1px solid ${C.line}`, background: "transparent", color: C.mute, fontSize: 12, cursor: "pointer", fontFamily: SANS }}>Today</button>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 11, color: C.faint }}>
+          <span><span style={{ display: "inline-block", width: 9, height: 9, background: C.red, borderRadius: 2, marginRight: 4 }} />Critical path</span>
+          <span><span style={{ display: "inline-block", width: 9, height: 9, background: C.green, borderRadius: 2, marginRight: 4 }} />Done</span>
+          <span><span style={{ display: "inline-block", width: 14, height: 5, background: `${C.mute}55`, borderRadius: 2, marginRight: 4, verticalAlign: 2 }} />Baseline</span>
+        </div>
+      </div>
+
+      <div ref={scrollRef} style={{ overflowX: "auto", overflowY: "hidden", border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel3 }}>
+        <div style={{ display: "flex", minWidth: LABEL + W }}>
+          {/* task names */}
+          <div style={{ width: LABEL, flexShrink: 0, borderRight: `1px solid ${C.line}`, background: C.panel3, position: "sticky", left: 0, zIndex: 2 }}>
+            <div style={{ height: 26, borderBottom: `1px solid ${C.lineSoft}` }} />
+            {layout.map((l, i) => l.kind === "group" ? (
+              <div key={i} style={{ height: 24, display: "flex", alignItems: "center", padding: "0 10px", fontSize: 10, letterSpacing: 1.2, textTransform: "uppercase", color: C.gold, background: `${C.gold}0D` }}>{l.label}</div>
+            ) : (
+              <div key={i} onClick={() => onPick && onPick(l.w)} title={l.w.name}
+                style={{ height: ROW, display: "flex", alignItems: "center", gap: 6, padding: "0 10px", fontSize: 12, color: C.text, cursor: onPick ? "pointer" : "default", borderBottom: `1px solid ${C.lineSoft}` }}>
+                {sched.byId[l.w.id].critical && <span style={{ width: 3, height: 14, background: C.red, borderRadius: 2, flexShrink: 0 }} />}
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.w.name}</span>
               </div>
-              <div style={{ width: 44, flexShrink: 0, fontSize: 11, color: late ? C.red : C.mute, textAlign: "right", ...NUM }}>{Math.round(num(w.pct))}%{late ? " ⚠" : ""}</div>
+            ))}
+          </div>
+
+          {/* time grid + bars */}
+          <div style={{ position: "relative", width: W, flexShrink: 0 }}>
+            <div style={{ height: 26, position: "relative", borderBottom: `1px solid ${C.lineSoft}` }}>
+              {ticks.map((t, i) => (
+                <div key={i} style={{ position: "absolute", left: x(t.day), top: 5, fontSize: 9.5, color: C.faint, whiteSpace: "nowrap", paddingLeft: 3 }}>{t.label}</div>
+              ))}
             </div>
-          );
-        })}
-        <div style={{ fontSize: 10.5, color: C.faint, marginTop: 8, marginLeft: 190 }}>Gold line = today. Bar fill = % complete. Red border = past target date.</div>
+            <div style={{ position: "relative", height: H }}>
+              {ticks.map((t, i) => (
+                <div key={i} style={{ position: "absolute", left: x(t.day), top: 0, bottom: 0, width: 1, background: C.lineSoft }} />
+              ))}
+              <div style={{ position: "absolute", left: x(sched.today), top: 0, bottom: 0, width: 2, background: C.gold, opacity: 0.85 }} title="Today" />
+
+              {showDeps && (
+                <svg width={W} height={H} style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "visible" }}>
+                  <defs>
+                    <marker id="ttj-ar" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                      <path d="M0,0 L6,3 L0,6 Z" fill={C.mute} />
+                    </marker>
+                    <marker id="ttj-ar-c" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                      <path d="M0,0 L6,3 L0,6 Z" fill={C.red} />
+                    </marker>
+                  </defs>
+                  {arrows.map((a) => (
+                    <path key={a.key} d={a.path} fill="none" stroke={a.crit ? C.red : C.mute} strokeWidth={a.crit ? 1.4 : 1}
+                      opacity={a.crit ? 0.75 : 0.4} markerEnd={`url(#${a.crit ? "ttj-ar-c" : "ttj-ar"})`} />
+                  ))}
+                </svg>
+              )}
+
+              {layout.filter((l) => l.kind === "row").map((l) => {
+                const w = l.w, r = sched.byId[w.id];
+                const t = tone(r, w);
+                const bs = w.baseStart ? toDayLocal(w.baseStart) : null;
+                const bt = w.baseTarget ? toDayLocal(w.baseTarget) : null;
+                const left = x(r.start), width = Math.max(w.milestone ? 0 : 6, x(r.finish + 1) - x(r.start));
+                return (
+                  <div key={w.id} style={{ position: "absolute", left: 0, right: 0, top: l.y, height: ROW }}>
+                    {bs !== null && bt !== null && !w.milestone && (
+                      <div title="Baseline" style={{ position: "absolute", left: x(bs), width: Math.max(4, x(bt + 1) - x(bs)), top: ROW - 9, height: 4, background: `${C.mute}44`, borderRadius: 2 }} />
+                    )}
+                    {w.milestone ? (
+                      <div onClick={() => onPick && onPick(w)} title={`${w.name} — ${r.finishDate}`}
+                        style={{ position: "absolute", left: left - 7, top: ROW / 2 - 7, width: 14, height: 14, background: r.done ? C.green : t, transform: "rotate(45deg)", borderRadius: 2, cursor: onPick ? "pointer" : "default" }} />
+                    ) : (
+                      <div onClick={() => onPick && onPick(w)} title={`${w.name}\n${r.startDate} → ${r.finishDate}${r.forecastReason ? ` (${r.forecastReason})` : ""}${r.slipDays > 0 ? `\nslipped ${r.slipDays}d` : ""}`}
+                        style={{ position: "absolute", left, width, top: 5, height: ROW - 15, background: `${t}30`, border: `1px solid ${t}`, borderRadius: 4, overflow: "hidden", cursor: onPick ? "pointer" : "default" }}>
+                        <div style={{ width: `${r.pct}%`, height: "100%", background: `${t}CC` }} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style={{ fontSize: 10.5, color: C.faint, marginTop: 8, lineHeight: 1.6 }}>
+        Gold line is today. Bars show the <b>forecast</b> — actual dates where recorded, otherwise the plan pushed out by progress so far and by any predecessor running late. The thin grey bar underneath is the agreed baseline, so the gap between them is the slippage.
       </div>
     </div>
   );
 }
 
+/* local date→day helper mirroring schedule.js, for baseline bars */
+const toDayLocal = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || "")); return m ? Math.round(Date.UTC(+m[1], +m[2] - 1, +m[3]) / 86400000) : null; };
+
+/* replace the works collection wholesale (used by re-baselining) */
+const withLogWorks = (s, works) => ({ ...s, works });
+
 function Works({ state, setState, canWrite }) {
   const [edit, setEdit] = useState(null);
-  const [view, setView] = useState("table");
+  const [view, setView] = useState("gantt");
   const [filterTrade, setFilterTrade] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
   const all = state.works || [];
   const list = all.filter((w) => (filterTrade === "All" || w.trade === filterTrade) && (filterStatus === "All" || w.status === filterStatus));
-  const overdue = all.filter((w) => isOverdue(w.target, w.status === "Done"));
+  /* One scheduling pass drives every view, so the table, the board and the
+     Gantt can never disagree about a date. */
+  const sched = React.useMemo(() => scheduleWorks(all, { today: today() }), [all]);
+  const overdue = all.filter((w) => sched.byId[w.id] && sched.byId[w.id].overdue);
   const active = all.filter((w) => w.status === "In Progress");
-  const avgPct = all.length ? Math.round(all.reduce((s, w) => s + Math.min(100, Math.max(0, num(w.pct))), 0) / all.length) : 0;
+  const R = (w) => sched.byId[w.id] || {};
+  const nameOf = (id) => { const w = all.find((x) => x.id === id); return w ? w.name : "(removed)"; };
   const save = () => {
     const rec = { ...edit, id: edit.id || uid(), pct: Math.min(100, Math.max(0, num(edit.pct))) };
     if (rec.status === "Done") rec.pct = 100;
+    /* Record what actually happened as the status moves — a programme built on
+       real dates is worth something; one built on intentions isn't. */
+    if (rec.status !== "Planned" && !rec.actualStart) rec.actualStart = today();
+    if (rec.status === "Done" && !rec.actualFinish) rec.actualFinish = today();
+    if (rec.status === "Planned") { rec.actualStart = ""; rec.actualFinish = ""; }
+    if (rec.status !== "Done") rec.actualFinish = "";
+    /* First save fixes the baseline, so slippage always has something to measure against. */
+    if (!rec.baseStart && rec.start) rec.baseStart = rec.start;
+    if (!rec.baseTarget && rec.target) rec.baseTarget = rec.target;
+    rec.deps = (rec.deps || []).filter((d) => d && d.id && d.id !== rec.id);
     setState((s) => ({ ...s, works: edit.id ? s.works.map((w) => (w.id === edit.id ? rec : w)) : [...(s.works || []), rec] }));
     setEdit(null);
+  };
+  const rebaseline = async () => {
+    if (!(await askConfirm({ title: "Re-baseline the programme?", body: "Today's forecast dates become the new agreed plan for every item, so slippage measures from here.", note: "Do this when a revised programme is signed off — not to make a delay disappear.", okLabel: "Re-baseline" }))) return;
+    setState((s) => withLogWorks(s, (s.works || []).map((w) => {
+      const r = sched.byId[w.id]; if (!r) return w;
+      return { ...w, baseStart: r.startDate, baseTarget: r.finishDate };
+    })));
   };
   const del = async (id) => { const r = (state.works || []).find((w) => w.id === id);
     if (await askConfirm({ title: "Delete this work item?", body: r ? `“${r.name}” comes off the programme.` : "It comes off the programme.", danger: true }))
@@ -1828,17 +2006,21 @@ function Works({ state, setState, canWrite }) {
     <div>
       <SectionTitle eyebrow="Projects" title="Work Schedule" sub="The construction programme — everything to be done, being done and already done on site, by trade and contractor." />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginBottom: 16 }}>
-        <KPI label="Work items" value={all.length} sub={`${all.filter((w) => w.status === "Done").length} done`} tone={C.blue} />
-        <KPI label="In progress" value={active.length} sub="on site now" tone={C.amber} />
-        <KPI label="Overdue" value={overdue.length} sub="past target date" tone={overdue.length ? C.red : C.green} />
-        <KPI label="Overall progress" value={`${avgPct}%`} sub="average across items" tone={C.purple} />
+        <KPI label="Forecast completion" value={sched.projectFinishDate ? new Date(sched.projectFinishDate + "T00:00:00Z").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "2-digit", timeZone: "UTC" }) : "—"}
+          sub={sched.baselineFinishDate ? (sched.slipDays > 0 ? `${sched.slipDays} days later than baseline` : sched.slipDays < 0 ? `${-sched.slipDays} days ahead` : "on baseline") : "no baseline set"}
+          tone={sched.slipDays > 0 ? C.red : C.green} />
+        <KPI label="Programme complete" value={`${sched.percentComplete}%`} sub={`${sched.counts.done} of ${sched.counts.total} items done`} tone={C.purple} />
+        <KPI label="On site now" value={active.length} sub={`${sched.counts.blocked} waiting on something else`} tone={C.amber} />
+        <KPI label="Running late" value={sched.counts.late} sub={`${overdue.length} already past target`} tone={sched.counts.late ? C.red : C.green} />
+        <KPI label="Critical path" value={sched.criticalPath.length} sub="items that move the end date" tone={C.blue} />
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
-        {viewBtn("table", "Table")}{viewBtn("board", "Board")}{viewBtn("timeline", "Timeline")}
+        {viewBtn("gantt", "Gantt")}{viewBtn("table", "Table")}{viewBtn("board", "Board")}
         <Sel value={filterTrade} onChange={(e) => setFilterTrade(e.target.value)} options={["All", ...WORK_TRADES]} style={{ width: 210 }} />
         <Sel value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} options={["All", ...WSTATUS]} style={{ width: 140 }} />
         <div style={{ flex: 1 }} />
+        {canWrite && all.length > 0 && <Btn ghost small onClick={rebaseline}><CalendarDays size={13} /> Re-baseline</Btn>}
         {canWrite && <Btn onClick={() => setEdit(blankWork())}><Plus size={14} /> Add work item</Btn>}
       </div>
 
@@ -1846,19 +2028,37 @@ function Works({ state, setState, canWrite }) {
         <Card pad={0}>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 940 }}>
-              <thead><tr><Th>Work item</Th><Th>Trade</Th><Th>Phase</Th><Th>Floor</Th><Th>Start</Th><Th>Target</Th><Th>Progress</Th><Th>Status</Th>{canWrite && <Th right>Actions</Th>}</tr></thead>
+              <thead><tr><Th>Work item</Th><Th>Trade</Th><Th>Planned</Th><Th>Forecast</Th><Th right>Slip</Th><Th>Progress</Th><Th>Status</Th>{canWrite && <Th right>Actions</Th>}</tr></thead>
               <tbody>
                 {list.map((w) => {
-                  const late = isOverdue(w.target, w.status === "Done");
+                  const r = R(w);
+                  const late = !!r.overdue;
                   return (
                     <tr key={w.id}>
-                      <Td><div style={{ fontWeight: 600 }}>{w.name}</div>{(w.contractor || w.capexId) && <div style={{ fontSize: 11, color: C.faint }}>{w.contractor}{w.contractor && w.capexId ? " · " : ""}{w.capexId ? `Capex: ${capexName(w.capexId)}` : ""}</div>}</Td>
+                      <Td>
+                        <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                          {r.critical && !r.done && <span title="On the critical path" style={{ width: 3, height: 13, background: C.red, borderRadius: 2, flexShrink: 0 }} />}
+                          {w.milestone && <span title="Milestone" style={{ width: 8, height: 8, background: C.gold, transform: "rotate(45deg)", flexShrink: 0 }} />}
+                          {w.name}
+                        </div>
+                        {(w.contractor || (r.blockedBy && r.blockedBy.length)) && (
+                          <div style={{ fontSize: 11, color: C.faint }}>
+                            {w.contractor}
+                            {w.contractor && r.blockedBy && r.blockedBy.length ? " · " : ""}
+                            {r.blockedBy && r.blockedBy.length ? `after ${r.blockedBy.map(nameOf).join(", ")}` : ""}
+                          </div>
+                        )}
+                      </Td>
                       <Td style={{ color: C.mute, fontSize: 12 }}>{w.trade}</Td>
-                      <Td style={{ color: C.mute, fontSize: 12 }}>{w.phase}</Td>
-                      <Td style={{ color: C.mute, fontSize: 12 }}>{w.floor || "—"}</Td>
-                      <Td style={{ color: C.mute, fontSize: 12, ...NUM }}>{w.start || "—"}</Td>
-                      <Td style={late ? { color: C.red, fontSize: 12, fontWeight: 700, ...NUM } : { color: C.mute, fontSize: 12, ...NUM }}>{w.target || "—"}{late ? " ⚠" : ""}</Td>
-                      <Td style={{ minWidth: 110 }}><Bar_ pct={num(w.pct)} tone={late ? C.red : WSTATUS_COLOR[w.status]} /></Td>
+                      <Td style={{ color: C.mute, fontSize: 11.5, ...NUM }}>{w.start || "—"}{w.target ? ` → ${w.target}` : ""}</Td>
+                      <Td style={{ fontSize: 11.5, color: r.slipDays > 0 ? C.amber : C.mute, ...NUM }}>
+                        {r.startDate ? `${r.startDate} → ${r.finishDate}` : "—"}
+                        {r.forecastReason && <div style={{ fontSize: 10, color: C.faint }}>{r.forecastReason}</div>}
+                      </Td>
+                      <Td right style={{ fontSize: 12, fontWeight: 700, color: r.slipDays > 0 ? C.red : r.slipDays < 0 ? C.green : C.faint, ...NUM }}>
+                        {r.slipDays > 0 ? `+${r.slipDays}d` : r.slipDays < 0 ? `${r.slipDays}d` : "—"}
+                      </Td>
+                      <Td style={{ minWidth: 110 }}><Bar_ pct={num(w.pct)} tone={late ? C.red : r.critical ? C.red : WSTATUS_COLOR[w.status]} /></Td>
                       <Td><Badge text={w.status} color={WSTATUS_COLOR[w.status]} /></Td>
                       {canWrite && <Td right>
                         <Pencil size={14} color={C.mute} style={{ cursor: "pointer", marginRight: 12 }} onClick={() => setEdit({ ...w })} />
@@ -1902,7 +2102,50 @@ function Works({ state, setState, canWrite }) {
         </div>
       )}
 
-      {view === "timeline" && <Card title="Programme timeline"><WorksTimeline items={list} /></Card>}
+      {view === "gantt" && (
+        <>
+          {sched.cycles.length > 0 && (
+            <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "11px 14px", background: `${C.red}12`, border: `1px solid ${C.red}55`, borderRadius: 10, marginBottom: 12, fontSize: 12.5, color: C.text, lineHeight: 1.6 }}>
+              <AlertTriangle size={15} color={C.red} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span><b>These items depend on each other in a loop</b> — {sched.cycles.map(nameOf).join(", ")}. Their dates can't be worked out until one of the links is removed.</span>
+            </div>
+          )}
+          <Card title="Programme"><GanttChart works={list} sched={sched} onPick={canWrite ? (w) => setEdit({ ...w }) : null} /></Card>
+          {(() => {
+            const crit = sched.criticalPath.map((id) => all.find((w) => w.id === id)).filter(Boolean)
+              .filter((w) => w.status !== "Done").slice(0, 6);
+            const slipping = list.filter((w) => R(w).slipDays > 0 && w.status !== "Done")
+              .sort((a, b) => R(b).slipDays - R(a).slipDays).slice(0, 6);
+            return (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 14, marginTop: 14 }}>
+                <Card title="What decides the end date">
+                  {crit.length ? crit.map((w) => {
+                    const r = R(w);
+                    return (
+                      <div key={w.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "7px 0", borderBottom: `1px solid ${C.lineSoft}`, fontSize: 12.5 }}>
+                        <span style={{ color: C.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.name}</span>
+                        <span style={{ color: C.mute, flexShrink: 0, ...NUM }}>{r.finishDate}{r.blockedBy && r.blockedBy.length ? ` · after ${nameOf(r.blockedBy[0])}` : ""}</span>
+                      </div>
+                    );
+                  }) : <Empty text="Nothing on the critical path is still open." />}
+                  <div style={{ fontSize: 11, color: C.faint, marginTop: 8, lineHeight: 1.55 }}>Every day lost on these is a day lost on the whole programme. Delays anywhere else have slack to absorb them.</div>
+                </Card>
+                <Card title="Slipping most">
+                  {slipping.length ? slipping.map((w) => {
+                    const r = R(w);
+                    return (
+                      <div key={w.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "7px 0", borderBottom: `1px solid ${C.lineSoft}`, fontSize: 12.5 }}>
+                        <span style={{ color: C.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.name}</span>
+                        <span style={{ color: C.red, flexShrink: 0, ...NUM }}>+{r.slipDays}d{r.forecastReason ? ` · ${r.forecastReason}` : ""}</span>
+                      </div>
+                    );
+                  }) : <Empty text="Nothing is behind its baseline." />}
+                </Card>
+              </div>
+            );
+          })()}
+        </>
+      )}
 
       {edit && (
         <Modal title={edit.id ? `Edit — ${edit.name}` : "Add work item"} onClose={() => setEdit(null)} wide>
@@ -1922,6 +2165,44 @@ function Works({ state, setState, canWrite }) {
                 {(state.capex || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </Field>
+          </div>
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12.5, color: C.mute, cursor: "pointer" }}>
+            <input type="checkbox" checked={!!edit.milestone} onChange={(e) => setEdit({ ...edit, milestone: e.target.checked })} />
+            This is a milestone — a date to hit, not work with a duration (handover, opening, an inspection)
+          </label>
+
+          {/* ---- what has to finish first ---- */}
+          <div style={{ marginTop: 14, borderTop: `1px solid ${C.lineSoft}`, paddingTop: 12 }}>
+            <div style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: C.mute, marginBottom: 4 }}>Has to wait for</div>
+            <div style={{ fontSize: 11.5, color: C.faint, marginBottom: 9, lineHeight: 1.55 }}>
+              Name what must finish before this can start. When one of those runs late, this item and everything behind it move automatically — that's the whole point.
+            </div>
+            {(edit.deps || []).map((d, i) => (
+              <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
+                <select value={d.id} onChange={(e) => { const deps = [...edit.deps]; deps[i] = { ...d, id: e.target.value }; setEdit({ ...edit, deps }); }} style={{ ...inputSt, flex: "1 1 180px", width: "auto" }}>
+                  {all.filter((x) => x.id !== edit.id).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                </select>
+                <Inp inputMode="numeric" value={d.lag ?? 0} onChange={(e) => { const deps = [...edit.deps]; deps[i] = { ...d, lag: num(e.target.value) }; setEdit({ ...edit, deps }); }}
+                  style={{ width: 74 }} title="Days to wait after it finishes — curing time, inspections" />
+                <span style={{ fontSize: 11.5, color: C.faint }}>days after</span>
+                <Btn small ghost tone={C.red} onClick={() => setEdit({ ...edit, deps: edit.deps.filter((_, j) => j !== i) })}>Remove</Btn>
+              </div>
+            ))}
+            {all.filter((x) => x.id !== edit.id).length > 0 ? (
+              <Btn small ghost onClick={() => setEdit({ ...edit, deps: [...(edit.deps || []), { id: all.find((x) => x.id !== edit.id).id, lag: 0 }] })}><Plus size={12} /> Add a predecessor</Btn>
+            ) : <div style={{ fontSize: 11.5, color: C.faint }}>Add another work item first, then you can link them.</div>}
+          </div>
+
+          {/* ---- what actually happened ---- */}
+          <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+            <Field label="Actually started"><Inp type="date" value={edit.actualStart || ""} onChange={(e) => setEdit({ ...edit, actualStart: e.target.value })} /></Field>
+            <Field label="Actually finished"><Inp type="date" value={edit.actualFinish || ""} onChange={(e) => setEdit({ ...edit, actualFinish: e.target.value })} /></Field>
+            <Field label="Baseline start (agreed plan)"><Inp type="date" value={edit.baseStart || ""} onChange={(e) => setEdit({ ...edit, baseStart: e.target.value })} /></Field>
+            <Field label="Baseline finish (agreed plan)"><Inp type="date" value={edit.baseTarget || ""} onChange={(e) => setEdit({ ...edit, baseTarget: e.target.value })} /></Field>
+          </div>
+          <div style={{ fontSize: 11, color: C.faint, marginTop: 6, lineHeight: 1.55 }}>
+            Actual dates are filled in for you as the status changes; correct them here if the real dates differ. The baseline is set from the first save and is what slippage is measured against — change it only when a revised programme is agreed.
           </div>
           <div style={{ marginTop: 12 }}><Field label="Notes"><Ta value={edit.notes} onChange={(e) => setEdit({ ...edit, notes: e.target.value })} /></Field></div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
