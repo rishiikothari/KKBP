@@ -11,6 +11,7 @@ import {
 import * as WA from "./importer.js";
 import { scheduleWorks, plannedDuration, fromDay, addDays, daysBetween } from "./schedule.js";
 import { normaliseProposals, planMerge, applyMerge } from "./programme.js";
+import { reconcileCloud, isNewerBuild, isSpareHost, PRIMARY_HOST, parseBuildId } from "./sync.js";
 /* The security rules shown in Team & Access are read from the very files that
    `npm run deploy:rules` publishes, so what you read here is always what is
    actually enforced — no second copy to drift out of date. */
@@ -450,6 +451,19 @@ async function writeAllowlist(emails) {
   const { db, F } = await getDb(cfg);
   await F.setDoc(F.doc(db, "kkbp", "allowlist"), { emails });
 }
+/* Which build this is, stamped in by vite.config.js. Two addresses serve this
+   app against one database, so a device has to be able to say what it is
+   running — and to recognise a workspace written by something newer. */
+const BUILD_ID = typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "dev|local";
+
+/* A one-way latch. Once this build has seen a workspace newer than itself it
+   never writes again for the life of the page: not from the debounced save, not
+   from a queued retry, not from anywhere. Module-level because pushLive lives
+   out here, outside the component that discovers the condition. */
+let liveReadOnly = false;
+const goReadOnly = () => { liveReadOnly = true; };
+const isReadOnly = () => liveReadOnly;
+
 async function connectLive(cfg, onSnap) {
   const { db, F } = await getDb(cfg);
   fbDocRef = F.doc(db, "kkbp", "state");
@@ -457,13 +471,14 @@ async function connectLive(cfg, onSnap) {
   return F.onSnapshot(fbDocRef,
     (snap) => {
       const d = snap.data();
-      onSnap({ exists: !!(d && d.data), by: d ? d.by : null, data: d ? d.data : null });
+      onSnap({ exists: !!(d && d.data), by: d ? d.by : null, data: d ? d.data : null, v: d ? d.v : null });
     },
     (err) => { console.error("live sync error", err); onSnap({ error: true, denied: (err && err.code) === "permission-denied" }); });
 }
 async function pushLive(state) {
   if (!fbDocRef || !fbSetDoc) return false;
-  try { await fbSetDoc(fbDocRef, { data: JSON.stringify(state), by: CLIENT_ID, ts: Date.now() }); return true; }
+  if (liveReadOnly) return false; /* out-of-date build: never touch the team's data */
+  try { await fbSetDoc(fbDocRef, { data: JSON.stringify(state), by: CLIENT_ID, ts: Date.now(), v: BUILD_ID }); return true; }
   catch (e) { console.error("live save failed", e); return false; }
 }
 
@@ -4143,6 +4158,19 @@ function SecurityPage({ state, setState, user, liveStatus }) {
         ); })()}
       </div>
 
+      <Card title="This build" style={{ marginBottom: 12 }}>
+        <div style={{ display: "grid", gap: 7, fontSize: 12.5, color: C.text, lineHeight: 1.6 }}>
+          <div><span style={{ color: C.mute }}>Address</span> · {typeof window !== "undefined" ? window.location.host || "local file" : "—"}
+            {SPARE_HOST ? <span style={{ color: C.amber }}> — spare copy; the main address is {PRIMARY_HOST}</span> : <span style={{ color: C.green }}> — the main address</span>}</div>
+          <div><span style={{ color: C.mute }}>Built</span> · {parseBuildId(BUILD_ID).ts.replace("T", " ") || "unknown"}
+            {parseBuildId(BUILD_ID).sha ? <span style={{ color: C.faint }}> from commit {parseBuildId(BUILD_ID).sha}</span> : ""}</div>
+          <div><span style={{ color: C.mute }}>Data epoch</span> · {DATA_EPOCH}</div>
+          <div style={{ fontSize: 11.5, color: C.faint, marginTop: 2, lineHeight: 1.6 }}>
+            Every address serves the same live workspace, so data is shared instantly — only the code differs between them. If a device ever finds the workspace newer than its own build it goes read-only rather than risk overwriting work it cannot understand.
+          </div>
+        </div>
+      </Card>
+
       <Card title="Suspicious activity" style={{ marginBottom: 12 }}>
         {flags.length === 0 && <div style={{ fontSize: 13, color: C.faint }}>Nothing unusual — no failed-login bursts, unexpected devices or mass deletions in the last 24 hours.</div>}
         <div style={{ display: "grid", gap: 8 }}>
@@ -4838,6 +4866,10 @@ function Team({ state, setState, user, liveStatus, authInfo }) {
 /* Installed-app detection: hide the install hint once TTJ runs from the home
    screen. iPadOS masquerades as a Mac, so touch points are checked too. */
 const IS_STANDALONE = typeof window !== "undefined" && ((window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true);
+/* Served from somewhere other than the live address? Say so — an old
+   home-screen icon should announce itself rather than quietly disagree with
+   the copy on the main address. Empty string when this IS the main address. */
+const SPARE_HOST = typeof window !== "undefined" && isSpareHost(window.location.host) ? window.location.host : "";
 const IS_IOS = typeof navigator !== "undefined" && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
 const HINT_KEY = "ttj-install-hint-dismissed";
 
@@ -4871,11 +4903,29 @@ export default function App() {
      returns or the workspace reconnects, and surfaced as an amber "not yet
      synced" line so nobody believes an unsaved change reached the team. */
   const [unsynced, setUnsynced] = useState(false);
+  /* Set when the shared workspace turns out to have been written by a newer
+     build than this one: the app goes read-only rather than resetting anything. */
+  const [staleBuild, setStaleBuild] = useState(null);
+  const staleRef = React.useRef(false);
+  /* Set when someone else's write came from a different, later build: purely
+     informational — reload to catch up. */
+  const [newerBuild, setNewerBuild] = useState(null);
+  /* Read-only mode is the app's most important safety behaviour and the hardest
+     to reach on purpose — it needs a workspace written by a future build. This
+     lets it be exercised: append ?readonly to the address. It can only ever
+     take privileges away from your own tab, and a reload clears it. */
+  React.useEffect(() => {
+    if (typeof window === "undefined" || !/[?&]readonly\b/.test(window.location.search)) return;
+    goReadOnly();
+    staleRef.current = true;
+    setStaleBuild({ cloudEpoch: "(simulated newer workspace)", myEpoch: DATA_EPOCH });
+  }, []);
   const [stateBytes, setStateBytes] = useState(0);
   const pendingLive = React.useRef(false);
   const retryTimer = React.useRef(null);
   const retryDelay = React.useRef(2000);
   const flushLive = React.useCallback(async () => {
+    if (isReadOnly()) { pendingLive.current = false; setUnsynced(false); return; }
     if (!pendingLive.current || !latestState.current) return;
     const ok = await pushLive(latestState.current);
     if (ok) { pendingLive.current = false; retryDelay.current = 2000; setUnsynced(false); }
@@ -4986,10 +5036,26 @@ export default function App() {
       const fallback = setTimeout(() => { if (first) { first = false; setLiveStatus("error"); finishBoot(base, false); } }, 8000);
       const localNow = () => latestState.current || base;
       const applyCloud = (cloud) => {
-        if (cloud.dataEpoch !== DATA_EPOCH) { finishBoot(migrateState(resetToCleanSlate(cloud)), false); return; } /* pre-reset data → clean slate, pushed up */
+        /* reconcileCloud (src/sync.js) owns this decision and is unit-tested,
+           because getting it wrong once meant wiping the shared workspace and
+           broadcasting the wipe. */
+        const verdict = reconcileCloud({ cloud, local: localNow(), myEpoch: DATA_EPOCH, countOf: recordCount });
+        if (verdict.action === "stale") {
+          /* This build is behind the workspace. Show the team's data so nobody
+             is left staring at nothing, but latch every write path shut: a
+             reset here would destroy data a newer build wrote, and the push
+             effect would send the destruction to everyone. */
+          goReadOnly();
+          staleRef.current = true;
+          setStaleBuild({ cloudEpoch: verdict.cloudEpoch, myEpoch: verdict.myEpoch });
+          pendingLive.current = false; setUnsynced(false);
+          finishBoot(migrateState({ ...freshState(), ...cloud }), true);
+          return;
+        }
+        if (verdict.action === "reset") { finishBoot(migrateState(resetToCleanSlate(cloud)), false); return; } /* pre-reset data → clean slate, pushed up */
         /* An empty cloud (freshly seeded by a blank device) must not shadow a
            device that already holds real records — push the local data up. */
-        if (recordCount(cloud) === 0 && recordCount(localNow()) > 0) { pushLive(localNow()); return; }
+        if (verdict.action === "seed") { pushLive(localNow()); return; }
         let next = migrateState({ ...freshState(), ...cloud });
         /* Un-pushed local edits? Merge them in (newer edit wins per record)
            instead of letting the remote copy silently erase them. */
@@ -5007,11 +5073,13 @@ export default function App() {
           setLiveStatus("on"); /* any successful snapshot = connected, even one arriving after the fallback */
           if (first) {
             first = false;
+            if (isNewerBuild(msg.v, BUILD_ID)) setNewerBuild(msg.v);
             if (msg.exists) { try { applyCloud(JSON.parse(msg.data)); return; } catch (e) {} }
             finishBoot(base, false); /* first device ever seeds the shared workspace */
             return;
           }
           if (msg.by === CLIENT_ID) return;
+          if (isNewerBuild(msg.v, BUILD_ID)) setNewerBuild(msg.v);
           if (!msg.exists) { pushLive(localNow()); return; } /* late first contact with an empty workspace — seed it */
           try { applyCloud(JSON.parse(msg.data)); } catch (e) {}
         });
@@ -5042,7 +5110,8 @@ export default function App() {
 
   useEffect(() => {
     if (!state) return;
-    if (remoteApply.current) { remoteApply.current = false; saveState(state); return; } /* cache remote copy locally, don't echo it back */
+    if (remoteApply.current) { remoteApply.current = false; if (!staleRef.current) saveState(state); return; } /* cache remote copy locally, don't echo it back */
+    if (staleRef.current) return; /* out-of-date build: don't write the cloud OR the local cache */
     const t = setTimeout(async () => {
       const okLocal = await saveState(state);
       setStateBytes(JSON.stringify(state).length); /* shared-doc size meter (Firestore caps at ~1MB) */
@@ -5106,6 +5175,10 @@ export default function App() {
      through the audit differ, so each add/edit/delete is recorded with the
      actor and device — no page can skip the trail. */
   const writeState = (updater) => {
+    if (staleRef.current) {
+      notify({ title: "This copy of the app is out of date", body: "The shared workspace has been updated by a newer version, so this copy can show data but not change it — saving here would overwrite work you cannot see.", note: "Reload the page. If this is the Firebase address, deploy the latest build first." });
+      return;
+    }
     setState((s) => {
       let next = typeof updater === "function" ? updater(s) : updater;
       if (!next || next === s || !user) return next;
@@ -5235,6 +5308,40 @@ export default function App() {
         </div>
       </div>
       <div style={{ flex: 1, minWidth: 0, padding: isMobile ? "calc(env(safe-area-inset-top, 0px) + 64px) 14px calc(env(safe-area-inset-bottom, 0px) + 60px)" : "26px 26px 60px" }}>
+        {staleBuild && (
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 14, padding: "11px 14px", background: `${C.red}16`, border: `1px solid ${C.red}66`, borderRadius: 10, fontSize: 12.5, color: C.text, lineHeight: 1.55 }}>
+            <AlertTriangle size={17} color={C.red} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <b>This copy of the app is out of date — read only.</b>
+              <div style={{ color: C.mute, marginTop: 3 }}>
+                The shared workspace has been updated by a newer version of TTJ, so nothing can be saved from here — it would overwrite work this build cannot understand. Everything on screen is still the team's live data.
+              </div>
+              <div style={{ color: C.faint, marginTop: 5, fontSize: 11 }}>
+                Reload this page to pick up the newer build. If you are on the Firebase address, run <b>npm run deploy</b> first. (Workspace {staleBuild.cloudEpoch || "unstamped"} · this build {staleBuild.myEpoch})
+              </div>
+              <div style={{ marginTop: 8 }}><Btn small onClick={() => window.location.reload()}>Reload</Btn></div>
+            </div>
+          </div>
+        )}
+        {!staleBuild && newerBuild && (
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 14, padding: "10px 13px", background: `${C.blue}14`, border: `1px solid ${C.blue}44`, borderRadius: 10, fontSize: 12.5, color: C.text, lineHeight: 1.55 }}>
+            <Sparkles size={15} color={C.blue} style={{ flexShrink: 0, marginTop: 2 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <b>A newer version of TTJ is live.</b>
+              <span style={{ color: C.mute }}> Someone is already on a build from {parseBuildId(newerBuild).ts.replace("T", " ")} — reload to catch up.</span>
+            </div>
+            <Btn small ghost tone={C.blue} onClick={() => window.location.reload()}>Reload</Btn>
+            <X size={15} color={C.mute} title="Dismiss" style={{ cursor: "pointer", flexShrink: 0, marginTop: 2 }} onClick={() => setNewerBuild(null)} />
+          </div>
+        )}
+        {SPARE_HOST && (
+          <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14, padding: "9px 13px", background: `${C.amber}12`, border: `1px solid ${C.amber}44`, borderRadius: 10, fontSize: 12, color: C.text }}>
+            <Layers size={14} color={C.amber} style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <b>Spare copy of the app.</b> <span style={{ color: C.mute }}>Same live data, but this address ({SPARE_HOST}) may be running older code. The main address is <b>{PRIMARY_HOST}</b>.</span>
+            </div>
+          </div>
+        )}
         {installHint && isMobile && (
           <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 14, padding: "11px 14px", background: `${C.gold}12`, border: `1px solid ${C.gold}44`, borderRadius: 10, fontSize: 12.5, color: C.text, lineHeight: 1.55 }}>
             <TTJMark size={26} />

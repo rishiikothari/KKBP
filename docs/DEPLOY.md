@@ -131,8 +131,9 @@ That builds the app and uploads it. First run prints a `…web.app` URL — the 
 is live there immediately. Every deploy is atomic and reversible: **Firebase
 console → Hosting → release history → Rollback**.
 
-GitHub is no longer involved in publishing. Keep the GitHub Pages workflow until
-the custom domain is confirmed working, then delete `.github/workflows/deploy.yml`.
+GitHub is no longer involved in publishing, but the Pages workflow stays on
+deliberately as a spare copy — see §1b for what running two addresses against one
+database does and does not mean.
 
 ### Security rules now live in the repo
 
@@ -145,6 +146,62 @@ npm run deploy:rules
 
 Publishing from here **replaces** whatever is in the console — check the repo
 copies say what you expect before the first run.
+
+---
+
+## 1b. Two addresses, one database
+
+The app is reachable at two addresses — `kkbpdashv2.web.app` and the GitHub Pages
+copy — and both are kept, the second as a spare. Worth understanding exactly what
+that means, because the behaviour surprises people:
+
+**Code is per-address. Data is per-database.** The Firebase config is baked into
+the source, so wherever the app is served from it opens the same Firestore
+document and holds a live listener on it. Add a task on one address and it appears
+on the other within a couple of seconds — even if that address is running last
+week's code. Only the HTML and JavaScript differ between the two.
+
+That is why GitHub Pages can show a feature the Firebase address does not: Pages
+rebuilds automatically on every push, Firebase Hosting only when you run
+`npm run deploy`. The data was never behind; the code was.
+
+### What stops that being dangerous
+
+- **A build that finds the workspace newer than itself goes read-only.** It shows
+  the team's live data and refuses every write, with a banner saying so. This
+  matters: the reconciliation used to reset the workspace to a clean slate on any
+  epoch mismatch and push the reset up, which would have destroyed everything the
+  moment two builds disagreed. `src/sync.js` owns that decision now and
+  `scripts/test-sync.mjs` pins it down.
+- **A newer build elsewhere shows a "reload to catch up" notice** — informational
+  only, and it ignores the same commit rebuilt at a different time, so it does not
+  cry wolf about the two addresses building the same code.
+- **The spare address labels itself.** Any host other than the live one carries a
+  "spare copy" strip naming the main address.
+- **Security → This build** reports the address, the build time, the commit and the
+  data epoch, so "which version is this device on?" has an answer.
+
+To exercise read-only mode deliberately, append `?readonly` to the address. It only
+ever removes abilities from your own tab and a reload clears it.
+
+### The home-screen icon is bound to its address
+
+An installed icon always opens the address it was installed from, and the service
+worker will serve it from cache if that address ever stops answering — so a dead
+address does not retire the copies installed from it. **Delete the icon added from
+the GitHub address and re-add it from `kkbpdashv2.web.app`** (and again when the
+custom domain goes live). Otherwise you are one tap away from the spare without
+realising.
+
+### Keeping Pages means keeping the repo public
+
+GitHub Pages on a private repository needs a paid GitHub plan. Keeping the spare
+therefore means the repo stays public. That is much less serious than it was — the
+passcodes that made a public repo dangerous are deleted, and the Firebase config in
+the source is public by design, protected by security rules rather than by being
+hidden. The standing risk is future: any secret committed by accident is instantly
+public. Worth revisiting when the Java service lands and real secrets start to
+exist.
 
 ---
 
@@ -242,7 +299,10 @@ and 100%. It won't stop spend, but nothing surprises you.
   both branches verified against local SHAs.
 - **Hosting live** — done. <https://kkbpdashv2.web.app>, serving from
   `kkbpdashv2` with the security headers from `firebase.json` applied.
-- **Remaining** — custom domain, authorized domains, then retire GitHub Pages.
+- **Version skew made safe** — done. A build behind the shared workspace goes
+  read-only instead of resetting it; the spare address labels itself.
+- **Remaining** — custom domain, authorized domains, and re-adding the home-screen
+  icon from the Firebase address.
 
 ## 6. Order to do it in
 
@@ -250,5 +310,6 @@ and 100%. It won't stop spend, but nothing surprises you.
 2. Add `team.kkbusinesspark.com` in Hosting; add the DNS record.
 3. Add that host to Auth → Authorized domains. **Sign in there to prove it works.**
 4. Set up the VM git remote; push; confirm a scratch clone matches.
-5. Make the GitHub repo private; delete the Pages workflow.
+5. Delete the home-screen icon added from the GitHub address; re-add from the
+   Firebase one (or the custom domain once it resolves).
 6. Tell the team the new address and to re-add the home-screen icon.
